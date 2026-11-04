@@ -22,6 +22,9 @@ name: Screenshots
 #                                 release re-render keeps it current. Also
 #                                 synced to packages/docs-site/public/ so the
 #                                 user docs site redeploys with the fresh card.
+#   img/wordmark-dark.png       — dev/wordmark.js + rsvg-convert, the README's
+#   img/wordmark-light.png        wordmark in the CLI's gradient, drawn from
+#                                 the rows `verbump --help` prints.
 #
 # img/demo.gif is NOT rendered here: it is the frozen legacy recording that
 # old ver-bump npm READMEs (1.1.8) hotlink via raw main URLs — never touch it.
@@ -65,14 +68,16 @@ jobs:
           fetch-depth: 1
           persist-credentials: false
 
-      - name: Install JetBrains Mono, gifsicle, ffmpeg, ttyd, and zsh
+      - name: Install JetBrains Mono, gifsicle, ffmpeg, ttyd, zsh, and librsvg
         run: |
           # zsh: the tapes `Set Shell "zsh"` and the runner image ships
           # without it — ttyd then fails with "execvp failed: no such file
           # or directory" INSIDE the rendered frames while the run stays
           # green, so the images must be eyeballed after any change here.
           sudo apt-get update -y
-          sudo apt-get install -y fonts-jetbrains-mono gifsicle ffmpeg ttyd zsh
+          # librsvg2-bin: rsvg-convert, for the wordmark pictures. Node, which
+          # runs dev/wordmark.js, ships with the runner image.
+          sudo apt-get install -y fonts-jetbrains-mono gifsicle ffmpeg ttyd zsh librsvg2-bin
           fc-cache -f
 
       - name: Install vhs (sha256-pinned release binary)
@@ -97,6 +102,9 @@ jobs:
       - name: Render social-preview card
         run: vhs dev/social.tape
 
+      - name: Render README wordmark (dark and light)
+        run: ./dev/screenshots.sh wordmark
+
       - name: Optimize verbump-demo.gif (lossless — no colour/quality reduction)
         run: |
           before=$(wc -c < img/verbump-demo.gif)
@@ -112,6 +120,8 @@ jobs:
             img/verbump-demo.gif
             img/verbump-demo-final.png
             img/social-preview.png
+            img/wordmark-dark.png
+            img/wordmark-light.png
           retention-days: 7
           if-no-files-found: error
 
@@ -145,7 +155,7 @@ jobs:
         uses: stefanzweifel/git-auto-commit-action@4a55954c782fc1ea30b9056cd3e7a2b40ca8887d # v7.2.0
         with:
           branch: main
-          file_pattern: img/screenshot.png img/verbump-demo.gif img/verbump-demo-final.png img/social-preview.png packages/docs-site/public/social-preview.png
+          file_pattern: img/screenshot.png img/verbump-demo.gif img/verbump-demo-final.png img/social-preview.png img/wordmark-dark.png img/wordmark-light.png packages/docs-site/public/social-preview.png
           commit_message: "docs(img): regenerate release visuals"
           commit_user_name: "github-actions[bot]"
           commit_user_email: "41898282+github-actions[bot]@users.noreply.github.com"

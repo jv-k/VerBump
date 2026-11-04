@@ -1,3 +1,15 @@
+## 4.1.1 (2026-11-04)
+- chore: updated package.json, updated CHANGELOG.md, bumped 4.1.0 -> 4.1.1
+- chore(deps): bump next from 16.2.10 to 16.2.12 (#140)
+- chore(deps): bump next from 16.2.10 to 16.2.12
+- ci: bump actions/checkout from 7.0.0 to 7.0.1 (#132)
+- chore(deps): bump postcss from 8.5.19 to 8.5.21 (#135)
+- chore(deps): bump react-dom from 19.2.7 to 19.2.8 (#137)
+- chore(deps): bump react-dom from 19.2.7 to 19.2.8
+- chore(deps): bump postcss from 8.5.19 to 8.5.21
+- ci: bump actions/checkout from 7.0.0 to 7.0.1
+- docs(img): regenerate release visuals
+
 ## 4.1.0 (2026-07-21)
 - chore: updated package.json, updated CHANGELOG.md, bumped 4.0.3 -> 4.1.0
 - chore: Updated bump-version task

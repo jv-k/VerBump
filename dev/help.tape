@@ -19,7 +19,7 @@ Set Width 1000
 # screenshot catches the pager; (3) extra rows render as blank background at
 # the bottom of the PNG, so don't overshoot — after editing the help text,
 # re-render and trim/grow this until the frame is snug. This clears all three.
-Set Height 2750
+Set Height 2732
 # Monokai Pro palette with a Carbon (#191816) background for the terminal itself.
 Set Theme { "background": "#191816", "foreground": "#FCFCFA", "cursor": "#FCFCFA", "black": "#2D2A2E", "red": "#FF6188", "green": "#A9DC76", "yellow": "#FFD866", "blue": "#FC9867", "magenta": "#AB9DF2", "cyan": "#78DCE8", "white": "#FCFCFA", "brightBlack": "#727072", "brightRed": "#FF6188", "brightGreen": "#A9DC76", "brightYellow": "#FFD866", "brightBlue": "#FC9867", "brightMagenta": "#AB9DF2", "brightCyan": "#78DCE8", "brightWhite": "#FCFCFA", "selection": "#5B595C" }
 Set Padding 12

@@ -109,8 +109,16 @@ load 'test_helper'
   run get_help_msg
   assert_success
   strip_ansi_output
-  # The author bullet sits directly beneath the pill — no empty line between.
-  refute_output --partial $'\n\n • Author'
+  # The homepage bullet sits directly beneath the pill — no empty line between.
+  refute_output --partial $'\n\n • Homepage'
+  assert_output --partial $' \n • Homepage'
+}
+
+@test "help-layout: the header has no author line (--about keeps it)" {
+  run get_help_msg
+  assert_success
+  strip_ansi_output
+  refute_output --partial "Author:"
 }
 
 @test "help: the tool description is sourced from package.json" {

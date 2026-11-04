@@ -1,7 +1,7 @@
 name: Screenshots
 
-# Regenerates the CLI visuals and commits them to main. Everything renders
-# via charmbracelet/vhs, which drives a REAL terminal emulator — so the
+# Regenerates the CLI visuals and commits them to main, by hand. Everything
+# renders via charmbracelet/vhs, which drives a REAL terminal emulator — so the
 # inverted-video section pills (VERIFY / RELEASE / …), the dim [dry-run]
 # markers, and the soft prompts all render faithfully. (freeze was dropped:
 # it flattens inverse-video and ignores SGR-faint, so it could not show the
@@ -18,8 +18,8 @@ name: Screenshots
 #   img/verbump-demo.gif        — vhs, sandbox-driven real bump recording
 #   img/verbump-demo-final.png  — the demo's finished DONE frame, as a still
 #   img/social-preview.png      — vhs, the 1280x640 social card; the version
-#                                 pill comes live from `verbump --help`, so a
-#                                 release re-render keeps it current. Also
+#                                 pill comes live from `verbump --help`, so it
+#                                 shows main's package.json version. Also
 #                                 synced to packages/docs-site/public/ so the
 #                                 user docs site redeploys with the fresh card.
 #   img/wordmark-dark.png       — dev/wordmark.js + rsvg-convert, the README's
@@ -29,17 +29,17 @@ name: Screenshots
 # img/demo.gif is NOT rendered here: it is the frozen legacy recording that
 # old ver-bump npm READMEs (1.1.8) hotlink via raw main URLs — never touch it.
 #
-# Triggers: every release tag (v*), plus by hand (workflow_dispatch). The old
-# "not on release" rationale cited the ADR-19 develop→main reset, which
-# ADR-21 retired — main is the canonical branch now, so rendering from main
-# after a tag lands is race-free. The bot commit deliberately has no
-# [skip ci]: Vercel honours that marker too, and the docs-site sync must
-# trigger a site deploy. Locally: `pnpm screenshots` (or `:help` / `:demo` /
-# `:social`) — see dev/screenshots.sh.
+# Trigger: by hand only (workflow_dispatch), to re-render main's pictures
+# without a release. Releases no longer run it: .verbumprc's PRE_BUMP_CMD
+# runs `dev/screenshots.sh release`, which draws the pictures for the new
+# version and stages them, so they ship in the release commit and its tag.
+# This workflow used to run on every v* tag, which left each tag holding the
+# previous release's pictures and added a second commit after it. The bot
+# commit deliberately has no [skip ci]: Vercel honours that marker too, and
+# the docs-site sync must trigger a site deploy. Locally: `pnpm screenshots`
+# (or `:help` / `:demo` / `:social` / `:wordmark`) — see dev/screenshots.sh.
 
 on:
-  push:
-    tags: ['v*']
   workflow_dispatch:
 
 concurrency:

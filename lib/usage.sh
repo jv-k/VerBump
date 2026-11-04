@@ -95,11 +95,24 @@ usage() {
     case "$TERM_COLS" in ''|*[!0-9]*) TERM_COLS=80 ;; esac
   fi
 
-  # figlet "future" (via pyfiglet) — one rainbow segment per letter. Seven
-  # letters (VerBump), so the seven RAINBOW colours map 1:1 with no dash cell.
-  printf  "%s╻ ╻%s┏━╸%s┏━┓%s┏┓ %s╻ ╻%s┏┳┓%s┏━┓%s\n" "${RAINBOW[@]}" "$RAINBOW_RST"
-  printf  "%s┃┏┛%s┣╸ %s┣┳┛%s┣┻┓%s┃ ┃%s┃┃┃%s┣━┛%s\n" "${RAINBOW[@]}" "$RAINBOW_RST"
-  printf  "%s┗┛ %s┗━╸%s╹┗╸%s┗━┛%s┗━┛%s╹ ╹%s╹  %s\n" "${RAINBOW[@]}" "$RAINBOW_RST"
+  # figlet "future" (via pyfiglet), one array element per cell so the
+  # gradient can colour each cell without splitting multibyte glyphs (which
+  # would depend on the locale). With colour off WORDMARK_GRAD is empty and
+  # the rows print plain.
+  local -a _wm_r0=( '╻' ' ' '╻' '┏' '━' '╸' '┏' '━' '┓' '┏' '┓' ' ' '╻' ' ' '╻' '┏' '┳' '┓' '┏' '━' '┓' )
+  local -a _wm_r1=( '┗' '┓' '┃' '┣' '╸' ' ' '┣' '┳' '┛' '┣' '┻' '┓' '┃' ' ' '┃' '┃' '┃' '┃' '┣' '━' '┛' )
+  local -a _wm_r2=( ' ' '┗' '┛' '┗' '━' '╸' '╹' '┗' '╸' '┗' '━' '┛' '┗' '━' '┛' '╹' ' ' '╹' '╹' ' ' ' ' )
+  _wordmark_row() {
+    local y="$1" x=0 line="" cell; shift
+    for cell in "$@"; do
+      line+="${WORDMARK_GRAD[x + WORDMARK_SHIFT * y]-}$cell"
+      x=$(( x + 1 ))
+    done
+    printf '%s%s\n' "$line" "${WORDMARK_RST-}"
+  }
+  _wordmark_row 0 "${_wm_r0[@]}"
+  _wordmark_row 1 "${_wm_r1[@]}"
+  _wordmark_row 2 "${_wm_r2[@]}"
 
   # Branded header pill + author/homepage bullets + dim tagline. No blank line
   # after the pill — the author bullet sits directly beneath it.

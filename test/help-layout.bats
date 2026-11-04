@@ -144,3 +144,26 @@ load 'test_helper'
   strip_ansi_output
   assert_output --partial "Without a value: print tool version and exit. With a value: set manual SemVer."
 }
+
+@test "help-wordmark: plain rows spell VerBump when colour is off" {
+  run env NO_COLOR=1 "${profile_script}" --help
+  assert_success
+  assert_line --index 0 "╻ ╻┏━╸┏━┓┏┓ ╻ ╻┏┳┓┏━┓"
+  assert_line --index 1 "┗┓┃┣╸ ┣┳┛┣┻┓┃ ┃┃┃┃┣━┛"
+  assert_line --index 2 " ┗┛┗━╸╹┗╸┗━┛┗━┛╹ ╹╹  "
+}
+
+@test "help-wordmark: each cell gets a 24-bit colour on a Monokai Pro diagonal" {
+  run env FORCE_COLOR=1 "${profile_script}" --help
+  assert_success
+  # Row 0 starts on yellow, and ends 20 of 24 steps along the diagonal.
+  [[ "${lines[0]}" == $'\e[38;2;255;216;102m╻'* ]]
+  [[ "${lines[0]}" == *$'\e[38;2;146;189;237m┓\e[0m' ]]
+  # Each row starts 2 steps further along, so row 2 ends on purple.
+  [[ "${lines[1]}" == $'\e[38;2;234;217;106m┗'* ]]
+  [[ "${lines[2]}" == *$'\e[38;2;171;157;242m \e[0m' ]]
+  # One colour code per cell: 21 cells in every row.
+  local codes
+  codes=$(printf '%s' "${lines[0]}" | grep -o $'\e\\[38;2;' | wc -l)
+  [ "$codes" -eq 21 ]
+}

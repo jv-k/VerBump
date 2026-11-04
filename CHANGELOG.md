@@ -1,3 +1,11 @@
+## 4.4.0 (2026-11-04)
+- chore: updated package.json, updated CHANGELOG.md, bumped 4.3.0 -> 4.4.0
+- feat(publish): make --update drive brew and node package managers (#154)
+- test(tests): clear HOMEBREW_NO_AUTO_UPDATE in the update suite
+- feat(publish): make --update drive brew and node package managers
+- docs(docs): add a brief updating section to the readme (#153)
+- docs(docs): add a brief updating section to the readme
+
 ## 4.3.0 (2026-11-04)
 - chore: updated package.json, updated CHANGELOG.md, bumped 4.2.0 -> 4.3.0
 - feat(publish): add --update to update VerBump in place (#152)

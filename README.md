@@ -47,6 +47,14 @@ npm install -g @jv-k/verbump
 brew install jv-k/tap/verbump
 ```
 
+### Updating:
+
+```sh
+verbump --update
+```
+
+Install-script installs update in place. For npm, Homebrew, and git clones, it prints the command to run instead. See [Updating](https://verbump.jvk.to/docs/installation#updating).
+
 ### Use it in your repo folder:
 
 ```sh

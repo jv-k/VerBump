@@ -1,6 +1,6 @@
 {
   "name": "@jv-k/verbump",
-  "version": "4.2.0",
+  "version": "4.3.0",
   "description": "Release tool for any Git repo: reads your Conventional Commits to suggest a SemVer bump, then updates the changelog, tags, and pushes. Optional release-branch and PR workflows — no Node toolchain, just git + jq.",
   "author": "John Valai <git@jvk.to>",
   "homepage": "https://github.com/jv-k/VerBump",

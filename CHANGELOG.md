@@ -1,3 +1,9 @@
+## 4.3.0 (2026-11-04)
+- chore: updated package.json, updated CHANGELOG.md, bumped 4.2.0 -> 4.3.0
+- feat(publish): add --update to update VerBump in place (#152)
+- feat(publish): add --update to update VerBump in place
+- docs(docs): drop the readme wordmark, the hero already shows it
+
 ## 4.2.0 (2026-11-04)
 - chore: updated package.json, updated CHANGELOG.md, bumped 4.1.1 -> 4.2.0
 - feat(ui): draw the wordmark in a diagonal Monokai Pro gradient (#150)

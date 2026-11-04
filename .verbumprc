@@ -5,4 +5,9 @@
 # publish is CI-gated — the git tag, GitHub release, and brew bump would
 # otherwise ship before CI gets a look. A failing hook exits before any
 # mutation; skip for a single run with --no-hooks.
-PRE_BUMP_CMD="pnpm lint && pnpm tests:run"
+#
+# Then it draws the README and docs-site pictures for the new version and
+# stages them, so the release commit (and its tag) carries them. The
+# Screenshots workflow only re-renders by hand now. Needs vhs, ttyd, ffmpeg,
+# rsvg-convert, jq and gifsicle; see dev/screenshots.sh.
+PRE_BUMP_CMD="pnpm lint && pnpm tests:run && ./dev/screenshots.sh release"

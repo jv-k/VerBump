@@ -38,8 +38,8 @@ _help_wrap() {
 
 # Show --help.
 usage() {
-  local SCRIPT_VER SCRIPT_NAME SCRIPT_AUTH SCRIPT_HOME SCRIPT_DESC env_var env_var_val
-  local env_vars=( SCRIPT_VER SCRIPT_NAME SCRIPT_AUTH SCRIPT_HOME )
+  local SCRIPT_VER SCRIPT_NAME SCRIPT_HOME SCRIPT_DESC env_var env_var_val
+  local env_vars=( SCRIPT_VER SCRIPT_NAME SCRIPT_HOME )
 
   # Tagline comes from the repo's package.json ".description"; this literal is
   # only a fallback for a package.json without one (or when jq is absent).
@@ -48,7 +48,6 @@ usage() {
   if command -v jq >/dev/null 2>&1; then
     SCRIPT_VER=$(  jq -r '.version  // ""'         "$MODULE_DIR/package.json" )
     SCRIPT_NAME=$( jq -r '.name     // "verbump"' "$MODULE_DIR/package.json" )
-    SCRIPT_AUTH=$( jq -r '.author   // ""'         "$MODULE_DIR/package.json" )
     SCRIPT_HOME=$( jq -r '.homepage // ""'         "$MODULE_DIR/package.json" )
     local _desc; _desc=$( jq -r '.description // ""' "$MODULE_DIR/package.json" )
     [ -n "$_desc" ] && SCRIPT_DESC="$_desc"
@@ -56,7 +55,6 @@ usage() {
     # Fallback: grep + trim (works without jq for --help alone)
     SCRIPT_VER=$(  cd "$MODULE_DIR" && grep version  package.json | head -1 )
     SCRIPT_NAME=$( cd "$MODULE_DIR" && grep name     package.json | head -1 )
-    SCRIPT_AUTH=$( cd "$MODULE_DIR" && grep author   package.json | head -1 )
     SCRIPT_HOME=$( cd "$MODULE_DIR" && grep homepage package.json | head -1 | sed -ne 's/.*\(http[^"]*\).*/\1/p' )
 
     for env_var in "${env_vars[@]}"; do
@@ -95,16 +93,29 @@ usage() {
     case "$TERM_COLS" in ''|*[!0-9]*) TERM_COLS=80 ;; esac
   fi
 
-  # figlet "future" (via pyfiglet) — one rainbow segment per letter. Seven
-  # letters (VerBump), so the seven RAINBOW colours map 1:1 with no dash cell.
-  printf  "%s╻ ╻%s┏━╸%s┏━┓%s┏┓ %s╻ ╻%s┏┳┓%s┏━┓%s\n" "${RAINBOW[@]}" "$RAINBOW_RST"
-  printf  "%s┃┏┛%s┣╸ %s┣┳┛%s┣┻┓%s┃ ┃%s┃┃┃%s┣━┛%s\n" "${RAINBOW[@]}" "$RAINBOW_RST"
-  printf  "%s┗┛ %s┗━╸%s╹┗╸%s┗━┛%s┗━┛%s╹ ╹%s╹  %s\n" "${RAINBOW[@]}" "$RAINBOW_RST"
+  # figlet "future" (via pyfiglet), one array element per cell so the
+  # gradient can colour each cell without splitting multibyte glyphs (which
+  # would depend on the locale). With colour off WORDMARK_GRAD is empty and
+  # the rows print plain.
+  local -a _wm_r0=( '╻' ' ' '╻' '┏' '━' '╸' '┏' '━' '┓' '┏' '┓' ' ' '╻' ' ' '╻' '┏' '┳' '┓' '┏' '━' '┓' )
+  local -a _wm_r1=( '┗' '┓' '┃' '┣' '╸' ' ' '┣' '┳' '┛' '┣' '┻' '┓' '┃' ' ' '┃' '┃' '┃' '┃' '┣' '━' '┛' )
+  local -a _wm_r2=( ' ' '┗' '┛' '┗' '━' '╸' '╹' '┗' '╸' '┗' '━' '┛' '┗' '━' '┛' '╹' ' ' '╹' '╹' ' ' ' ' )
+  _wordmark_row() {
+    local y="$1" x=0 line="" cell; shift
+    for cell in "$@"; do
+      line+="${WORDMARK_GRAD[x + WORDMARK_SHIFT * y]-}$cell"
+      x=$(( x + 1 ))
+    done
+    printf '%s%s\n' "$line" "${WORDMARK_RST-}"
+  }
+  _wordmark_row 0 "${_wm_r0[@]}"
+  _wordmark_row 1 "${_wm_r1[@]}"
+  _wordmark_row 2 "${_wm_r2[@]}"
 
-  # Branded header pill + author/homepage bullets + dim tagline. No blank line
-  # after the pill — the author bullet sits directly beneath it.
+  # Branded header pill + homepage bullet + dim tagline. No blank line after
+  # the pill — the homepage bullet sits directly beneath it. The author is
+  # left to --about.
   printf '\n%b %s v%s %b\n' "${S_HDR_SUB-}" "${SCRIPT_NAME}" "${SCRIPT_VER}" "${S_HDR_END-}"
-  printf ' %b%s%b Author:   %s\n'   "${S_BULLET-}" "${I_BULLET-}" "${RESET-}" "${SCRIPT_AUTH}"
   printf ' %b%s%b Homepage: %s\n\n' "${S_BULLET-}" "${I_BULLET-}" "${RESET-}" "${SCRIPT_HOME}"
   # Tool description (from package.json), dim and wrapped to the terminal.
   if (( TERM_COLS > 0 )); then

@@ -42,23 +42,49 @@ if [ "$USE_COLOR" = 1 ]; then
   INVERT='\033[7m'
   RESET='\033[0m'
 
-  RAINBOW=(
-    "$(printf '\033[38;5;196m')"
-    "$(printf '\033[38;5;202m')"
-    "$(printf '\033[38;5;226m')"
-    "$(printf '\033[38;5;082m')"
-    "$(printf '\033[38;5;021m')"
-    "$(printf '\033[38;5;093m')"
-    "$(printf '\033[38;5;163m')"
-  )
+  # The wordmark's diagonal gradient: WORDMARK_STOPS, two or more hex
+  # colours that read on a dark background, blended in even segments: Monokai
+  # Pro's yellow, green, cyan and purple, the theme of the pictures in img/.
+  # dev/wordmark.js reads the same line to draw the README's pictures, so it
+  # stays one hex list on one line.
+  # WORDMARK_GRAD[k] is the 24-bit colour of a cell whose place on the
+  # diagonal is k = x + WORDMARK_SHIFT * y, for the 21 x 3 cells of the
+  # VerBump wordmark; usage() picks one per cell. Integer maths only, rounded
+  # half up, so bash 3.2 needs no floating point.
+  WORDMARK_STOPS=( ffd866 a9dc76 78dce8 ab9df2 )
+  WORDMARK_SHIFT=2
+  WORDMARK_GRAD=()
+  _wm_stops=()
+  for _wm_hex in "${WORDMARK_STOPS[@]}"; do
+    _wm_stops+=( $(( 16#${_wm_hex:0:2} )) $(( 16#${_wm_hex:2:2} )) $(( 16#${_wm_hex:4:2} )) )
+  done
+  _wm_seg=$(( ${#WORDMARK_STOPS[@]} - 1 ))
+  _wm_span=$(( 20 + WORDMARK_SHIFT * 2 ))
+  _wm_k=0
+  while (( _wm_k <= _wm_span )); do
+    # at = seg * k / span; i is the segment, fnum / span the place within it.
+    _wm_num=$(( _wm_k * _wm_seg ))
+    _wm_i=$(( _wm_num / _wm_span )); (( _wm_i > _wm_seg - 1 )) && _wm_i=$(( _wm_seg - 1 ))
+    _wm_f=$(( _wm_num - _wm_i * _wm_span ))
+    _wm_rgb=()
+    for _wm_c in 0 1 2; do
+      _wm_from=${_wm_stops[_wm_i * 3 + _wm_c]}
+      _wm_to=${_wm_stops[(_wm_i + 1) * 3 + _wm_c]}
+      _wm_rgb+=( $(( (2 * (_wm_from * _wm_span + (_wm_to - _wm_from) * _wm_f) + _wm_span) / (2 * _wm_span) )) )
+    done
+    # Bash 3.2's printf -v takes a plain name only, not an array element.
+    printf -v _wm_esc '\033[38;2;%d;%d;%dm' "${_wm_rgb[@]}"
+    WORDMARK_GRAD[_wm_k]=$_wm_esc
+    _wm_k=$(( _wm_k + 1 ))
+  done
+  unset _wm_stops _wm_hex _wm_seg _wm_span _wm_k _wm_num _wm_i _wm_f _wm_rgb _wm_c _wm_from _wm_to _wm_esc
   # shellcheck disable=SC2059
-  RAINBOW_RST=$(printf "$RESET")
+  WORDMARK_RST=$(printf "$RESET")
 else
   YELLOW=''; LIGHTYELLOW=''; RED=''; LIGHTRED=''; GREEN=''; LIGHTGREEN=''
   BLUE=''; LIGHTBLUE=''; PURPLE=''; LIGHTPURPLE=''; CYAN=''; LIGHTCYAN=''
   WHITE=''; LIGHTGRAY=''; DARKGRAY=''; DIM=''; BOLD=''; INVERT=''; RESET=''
-  RAINBOW=( '' '' '' '' '' '' '' )
-  RAINBOW_RST=''
+  WORDMARK_SHIFT=2; WORDMARK_GRAD=(); WORDMARK_RST=''
 fi
 
 # Preset styles (character-level) — semantic aliases. Call sites reference

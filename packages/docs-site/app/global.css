@@ -2,8 +2,9 @@
 @import 'fumadocs-ui/css/neutral.css';
 @import 'fumadocs-ui/css/preset.css';
 
-/* VerBump brand tokens — the 7-color terminal-logo rainbow from lib/styles.sh
-   (xterm-256 codes 196, 202, 226, 82, 21, 93, 163). */
+/* VerBump brand tokens — the 7 colours of the old terminal-logo rainbow
+   (xterm-256 codes 196, 202, 226, 82, 21, 93, 163). The wordmark now uses
+   the Monokai Pro gradient in lib/styles.sh (WORDMARK_STOPS). */
 @theme {
   --color-vb-red: #ff0000;
   --color-vb-orange: #ff5f00;

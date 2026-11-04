@@ -1,3 +1,15 @@
+## 4.2.0 (2026-11-04)
+- chore: updated package.json, updated CHANGELOG.md, bumped 4.1.1 -> 4.2.0
+- feat(ui): draw the wordmark in a diagonal Monokai Pro gradient (#150)
+- Merge main into feat/wordmark-gradient
+- docs(img): regenerate release visuals
+- chore: draw the release pictures in the release commit itself
+- feat(ui): drop the author line from the --help header
+- docs: render the help, demo and social pictures with the new wordmark
+- ci: render and commit the README wordmark with the other pictures
+- docs: head the README with the gradient wordmark
+- feat(ui): draw the wordmark in a diagonal Monokai Pro gradient
+
 ## 4.1.1 (2026-11-04)
 - chore: updated package.json, updated CHANGELOG.md, bumped 4.1.0 -> 4.1.1
 - chore(deps): bump next from 16.2.10 to 16.2.12 (#140)

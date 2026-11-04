@@ -318,7 +318,7 @@ Each requirement has an ID so tests and PRs can reference it.
 | Required for linting | `shellcheck ≥ 0.8` |
 | Conditional at runtime | `gh` — only when `--release` / `--pr` is used (default notes via `gh --generate-notes`); `node`/`npx` only if `VERBUMP_RELEASE_NOTES_CMD` is overridden with a Node-based notes command |
 | Conditional at runtime | `tomlq` (TOML) / `yq` (YAML) — only when `--bump` / `BUMP_FILES` targets those formats (JSON targets need only `jq`) |
-| Conditional at runtime | `tar`, `curl` (or `wget`), `sha256sum` (or `shasum`) — only when `--update` runs the shipped installer (R-UPD-3) |
+| Conditional at runtime | `tar`, `curl` (or `wget`), `sha256sum` (or `shasum`) — only when `--update` runs the shipped installer (R-UPD-3); `brew` or `npm`/`pnpm`/`yarn`/`bun` only when `--update` updates an install that tool made (R-UPD-7) |
 | Optional | `pnpm` or `npm` (install + `dev` scripts); `zsh`, `fish` (to verify their completion scripts locally); `terminalizer` (regenerate demo GIF) |
 
 ---

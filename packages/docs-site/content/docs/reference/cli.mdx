@@ -78,7 +78,7 @@ the stable core (`1.2.3-dev.5 --patch` → `1.2.4`) — the full rules live in
 | `-h`, `--help` | Show the help message (paged through `less`/`more` when the terminal is short). |
 | `--completions <shell>` | Emit a completion script for bash, zsh, or fish. |
 | `--install-completions[=<shell>]` | Install the completion script (auto-detects the shell). |
-| `--update [<version>]` | Update VerBump itself to the latest release, or to `<version>`. Works for install-script installs; for npm, Homebrew, and git checkouts it prints the command that updates them. Honours `--dry-run`. See [Installation](/docs/installation#updating). |
+| `--update [<version>]` | Update VerBump itself to the latest release, or to `<version>`. Uses whatever installed VerBump: the install script, Homebrew (`brew update` then `brew upgrade`), or npm / pnpm / yarn / bun. Git checkouts are left alone. Honours `--dry-run`. See [Installation](/docs/installation#updating). |
 
 See [Dry-run & undo](/docs/guides/dry-run-undo) for the exact semantics of
 `--undo`.

@@ -66,11 +66,11 @@ What it does depends on how VerBump was installed:
 | Installed with | `verbump --update` |
 | --- | --- |
 | Install script | Runs the installer that ships inside your install, against the same prefix. The download is checked against its sha256, and a failure keeps your current install. |
-| npm / pnpm | Exits 3 and prints `npm install -g @jv-k/verbump@latest` (or the `pnpm add -g` form). |
-| Homebrew | Exits 3 and prints `brew upgrade jv-k/tap/verbump`. |
+| npm / pnpm / yarn / bun | Re-installs globally with the manager that installed it, e.g. `npm install -g @jv-k/verbump@latest` or `pnpm add -g @jv-k/verbump@<version>`. The manager is read from the install path. |
+| Homebrew | Runs `brew update`, then `brew upgrade jv-k/tap/verbump`. Homebrew cannot install a chosen version, so `--update <version>` exits 2. |
 | Git clone (manual install) | Exits 3 and prints the `git pull` command for the checkout. |
 
-Add `--dry-run` to see the installer command without running it.
+Add `--dry-run` to see the commands without running them.
 
 <Callout>
   Install-script installs from before `--update` existed do not carry a copy

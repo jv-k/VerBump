@@ -139,8 +139,9 @@ All preflights run before anything is mutated and exit `3`.
 | `2` | `--update=` without a version | Pass a SemVer 2.0 version, e.g. `--update=4.2.0`, or use bare `--update` for the latest release. |
 | `2` | The supplied version is not valid SemVer 2.0 | Pass a release version, e.g. `verbump --update 4.2.0`, or drop the version to get the latest release. |
 | `3` | VerBump is running from a git checkout | Run `git -C <checkout> pull` to update the checkout. |
-| `3` | VerBump was installed with Homebrew | Run `brew upgrade jv-k/tap/verbump`. |
-| `3` | VerBump was installed from npm | Run `npm install -g @jv-k/verbump@latest` (or `pnpm add -g`). A pinned version carries over as `@<version>`. |
+| `2` | A version was passed for a Homebrew install (Homebrew cannot install a chosen version) | Run `verbump --update` with no version to get the latest release. |
+| `3` | The package manager that owns the install (`brew`, `npm`, `pnpm`, `yarn`, `bun`) is not on `PATH` | Put it on your `PATH` and re-run `verbump --update`, or run the printed command yourself. |
+| that command's code | `brew update`, `brew upgrade` or the global re-install failed | Its message is printed above, and your previous install is still in place. Fix the cause and re-run `verbump --update`. |
 | `3` | VerBump cannot tell how it was installed | Re-run the install script one-liner. |
 | `3` | The install has no copy of `install.sh` (installed before `--update` existed) | Re-run the install script one-liner once. |
 | `1` | Could not create or copy to a temporary file | Check that `$TMPDIR` (or `/tmp`) is writable, then re-run `verbump --update`. |

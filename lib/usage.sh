@@ -363,7 +363,7 @@ usage() {
   print-opt-row "-h" "--help"          ""            "Show this help message."
   print-opt-row ""   "--completions"   "<shell>"     "Emit completion script for bash, zsh, or fish."
   print-opt-row ""   "--install-completions" "[=<shell>]" "Install completion script (auto-detects shell)."
-  print-opt-row ""   "--update"        "[<version>]" "Update VerBump itself (curl installs; prints the upgrade command for npm, Homebrew, git)."
+  print-opt-row ""   "--update"        "[<version>]" "Update VerBump with whatever installed it (install script, Homebrew, npm/pnpm/yarn/bun)."
 
   # EXAMPLES section pill
   printf '\n%b EXAMPLES %b\n' "${S_HDR_CYAN-}" "${S_HDR_END-}"

@@ -53,7 +53,7 @@ brew install jv-k/tap/verbump
 verbump --update
 ```
 
-Install-script installs update in place. For npm, Homebrew, and git clones, it prints the command to run instead. See [Updating](https://verbump.jvk.to/docs/installation#updating).
+It updates with whatever installed VerBump: the install script, Homebrew (`brew update` first), or npm / pnpm / yarn / bun. Git clones are left alone. See [Updating](https://verbump.jvk.to/docs/installation#updating).
 
 ### Use it in your repo folder:
 

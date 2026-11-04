@@ -23,6 +23,9 @@ setup() {
   export STUB_LOG
   mkdir -p "$WORK/bin"
   export PATH="$WORK/bin:$PATH"
+  # GitHub's runner images export HOMEBREW_NO_AUTO_UPDATE=1; clear it so the
+  # stubs see only what --update itself sets.
+  unset HOMEBREW_NO_AUTO_UPDATE
 
   F_TEMPS=()
   CLEANUP_CMDS=( "rm -rf ${WORK}" )

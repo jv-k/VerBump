@@ -2,7 +2,8 @@
 #
 # dev/screenshots.sh — regenerate img/screenshot.png, img/verbump-demo.gif
 # (plus its final-frame still img/verbump-demo-final.png), and
-# img/social-preview.png via vhs. (img/demo.gif is the frozen legacy
+# img/social-preview.png via vhs, and the README's img/wordmark-dark.png and
+# img/wordmark-light.png via dev/wordmark.js and rsvg-convert. (img/demo.gif is the frozen legacy
 # recording hotlinked by old ver-bump npm READMEs — never regenerated or
 # cleaned here.)
 #
@@ -10,22 +11,33 @@
 # docs site serves its own copy, and this keeps the two in lock-step.
 #
 # Usage:
-#   ./dev/screenshots.sh           # all three
+#   ./dev/screenshots.sh           # all of them
 #   ./dev/screenshots.sh help      # just the --help PNG
 #   ./dev/screenshots.sh demo      # just the sandbox-bump GIF
 #   ./dev/screenshots.sh social    # just the 1280x640 social card
+#   ./dev/screenshots.sh wordmark  # just the README's wordmark pictures
 #
 # Requires: vhs (https://github.com/charmbracelet/vhs).  Install: brew install vhs
+# The wordmark also needs node and rsvg-convert (librsvg).  Install: brew install librsvg
 
 set -eo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_ROOT"
 
-if ! command -v vhs >/dev/null 2>&1; then
-  echo "screenshots: vhs not found on PATH. Install with: brew install vhs" >&2
-  exit 127
-fi
+target="${1:-all}"
+
+need() {
+  if ! command -v "$1" >/dev/null 2>&1; then
+    echo "screenshots: $1 not found on PATH. Install with: $2" >&2
+    exit 127
+  fi
+}
+[ "$target" = wordmark ] || need vhs "brew install vhs"
+case "$target" in wordmark|all)
+  need node "brew install node"
+  need rsvg-convert "brew install librsvg"
+;; esac
 
 mkdir -p img img/tmp
 
@@ -43,7 +55,15 @@ sync_social() {
   echo "screenshots: synced social card -> packages/docs-site/public/"
 }
 
-target="${1:-all}"
+# The README's wordmark, from the rows --help prints, in the CLI's gradient:
+# one picture for a dark page and one for a light page.
+wordmark() {
+  local variant
+  for variant in dark light; do
+    node dev/wordmark.js "$variant" | rsvg-convert -o "img/wordmark-$variant.png"
+  done
+  echo "screenshots: wrote img/wordmark-dark.png and img/wordmark-light.png"
+}
 case "$target" in
   help)
     clean img/screenshot.png img/tmp/help.gif
@@ -58,6 +78,9 @@ case "$target" in
     vhs dev/social.tape
     sync_social
   ;;
+  wordmark)
+    wordmark
+  ;;
   all)
     clean img/screenshot.png img/verbump-demo.gif img/verbump-demo-final.png \
           img/social-preview.png img/tmp/help.gif img/tmp/social.gif
@@ -65,10 +88,11 @@ case "$target" in
     vhs dev/demo.tape
     vhs dev/social.tape
     sync_social
+    wordmark
   ;;
   *)
     echo "screenshots: unknown target '$target'" >&2
-    echo "  expected: help | demo | social | all" >&2
+    echo "  expected: help | demo | social | wordmark | all" >&2
     exit 2
   ;;
 esac

@@ -1,7 +1,12 @@
-# VerBump
+<h1 align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/jv-k/VerBump/main/img/wordmark-dark.png">
+    <img src="https://raw.githubusercontent.com/jv-k/VerBump/main/img/wordmark-light.png" alt="VerBump" width="300">
+  </picture>
+</h1>
 
 <div align="center">
-  <img src="https://raw.githubusercontent.com/jv-k/VerBump/main/img/social-preview.png" alt="VerBump social card: rainbow ASCII wordmark in a dark terminal window, the current version pill, the tagline 'Release tool for any Git repo.', and the pipeline Conventional Commits, SemVer, changelog, tag, push.">
+  <img src="https://raw.githubusercontent.com/jv-k/VerBump/main/img/social-preview.png" alt="VerBump social card: the VerBump wordmark in a yellow, green, cyan and purple gradient in a dark terminal window, the current version pill, the tagline 'Release tool for any Git repo.', and the pipeline Conventional Commits, SemVer, changelog, tag, push.">
 </div>
 
 **A plain-bash release tool for any Git repo.**

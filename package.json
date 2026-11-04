@@ -40,6 +40,7 @@
     "screenshots:help": "./dev/screenshots.sh help",
     "screenshots:demo": "./dev/screenshots.sh demo",
     "screenshots:social": "./dev/screenshots.sh social",
+    "screenshots:wordmark": "./dev/screenshots.sh wordmark",
     "prepublishOnly": "bash dev/prepublish-version-guard.sh"
   },
   "keywords": [

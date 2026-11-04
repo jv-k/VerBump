@@ -153,7 +153,7 @@ jobs:
       # name + version from it (version_block in lib/ui.sh).
       - name: Build runtime tarball + sha256
         run: |
-          tar -czf verbump.tar.gz verbump.sh lib LICENSE package.json
+          tar -czf verbump.tar.gz verbump.sh lib LICENSE package.json install.sh
           sha256sum verbump.tar.gz > verbump.tar.gz.sha256
 
       # Unversioned asset names keep install.sh's URLs stable:

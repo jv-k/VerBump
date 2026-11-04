@@ -359,10 +359,11 @@ usage() {
   print-opt-row "-q" "--quiet"         ""            "Suppress decoration; print only the new version on stdout (needs -y, -v, a bump level, or --preid)."
   print-opt-row ""   "--json"          ""            "With --dry-run: print the release plan as one JSON object on stdout (needs -y, -v, a bump level, or --preid)."
 
-  print-opt-group "Help & completions"
+  print-opt-group "Help, completions & updates"
   print-opt-row "-h" "--help"          ""            "Show this help message."
   print-opt-row ""   "--completions"   "<shell>"     "Emit completion script for bash, zsh, or fish."
   print-opt-row ""   "--install-completions" "[=<shell>]" "Install completion script (auto-detects shell)."
+  print-opt-row ""   "--update"        "[<version>]" "Update VerBump itself (curl installs; prints the upgrade command for npm, Homebrew, git)."
 
   # EXAMPLES section pill
   printf '\n%b EXAMPLES %b\n' "${S_HDR_CYAN-}" "${S_HDR_END-}"
@@ -379,6 +380,7 @@ usage() {
   print-example-row "${SCRIPT_CMD} --bump 'pkg/__init__.py:__version__ = \"{{version}}\"'" "Also bump a Python __version__ via a text pattern (no extra tool)."
   print-example-row "${SCRIPT_CMD} --bump 'main.go:Version = \"{{version}}\"'" "Also bump a Go const via a text pattern (no extra tool)."
   print-example-row "${SCRIPT_CMD} --install-completions" "Install shell completions (auto-detects shell)."
+  print-example-row "${SCRIPT_CMD} --update"            "Update VerBump to the latest release."
 
   printf '\n  %b(long forms accept --name value or --name=value)%b\n\n' "${S_DIM-}" "${RESET-}"
 }

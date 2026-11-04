@@ -148,7 +148,7 @@ _verbump() {
             return 0
             ;;
         # Options that take a free-form argument — no completion
-        -v|--version|-m|--message|-p|--push|-t|--tag-prefix|-B|--branch-prefix|--undo|--base|--preid|--bump)
+        -v|--version|-m|--message|-p|--push|-t|--tag-prefix|-B|--branch-prefix|--undo|--update|--base|--preid|--bump)
             return 0
             ;;
     esac
@@ -157,7 +157,7 @@ _verbump() {
           --dry-run --no-commit --no-branch --no-changelog --pause-changelog \
           --yes --quiet --json --undo --branch --pr --base --major --minor --patch --preid --release \
           --sign --allow-dirty --allow-empty --no-fetch --no-hooks \
-          --help --completions --install-completions --about \
+          --help --completions --install-completions --update --about \
           -v -m -f -p -t -B -d -n -b -c -l -y -q -h"
     COMPREPLY=( $(compgen -W "$opts" -- "$cur") )
 }
@@ -213,6 +213,7 @@ _verbump() {
     '--no-hooks[skip the PRE_BUMP_CMD / POST_TAG_CMD release hooks]' \
     '--completions[emit completion script]:shell:(bash zsh fish)' \
     '--install-completions[install completion script for detected / specified shell]::shell:(bash zsh fish)' \
+    '--update[update VerBump itself to the latest or a given release]::version:' \
     '--about[print branded version info and exit]'
 }
 
@@ -257,6 +258,7 @@ for _cmd in verbump verbump.sh VerBump
     complete -c $_cmd      -l no-hooks       -d 'Skip the PRE_BUMP_CMD / POST_TAG_CMD release hooks'
     complete -c $_cmd      -l completions    -x -a 'bash zsh fish' -d 'Emit completion script'
     complete -c $_cmd      -l install-completions -a 'bash zsh fish' -d 'Install completions for detected/specified shell'
+    complete -c $_cmd      -l update         -d 'Update VerBump itself to the latest or a given release'
     complete -c $_cmd      -l about          -d 'Print branded version info and exit'
 end
 FISH_EOF

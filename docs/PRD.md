@@ -318,6 +318,7 @@ Each requirement has an ID so tests and PRs can reference it.
 | Required for linting | `shellcheck ≥ 0.8` |
 | Conditional at runtime | `gh` — only when `--release` / `--pr` is used (default notes via `gh --generate-notes`); `node`/`npx` only if `VERBUMP_RELEASE_NOTES_CMD` is overridden with a Node-based notes command |
 | Conditional at runtime | `tomlq` (TOML) / `yq` (YAML) — only when `--bump` / `BUMP_FILES` targets those formats (JSON targets need only `jq`) |
+| Conditional at runtime | `tar`, `curl` (or `wget`), `sha256sum` (or `shasum`) — only when `--update` runs the shipped installer (R-UPD-3) |
 | Optional | `pnpm` or `npm` (install + `dev` scripts); `zsh`, `fish` (to verify their completion scripts locally); `terminalizer` (regenerate demo GIF) |
 
 ---
@@ -401,5 +402,6 @@ Exactly the flags shipping in `2.0.0`:
 | — | `--undo` | optional | Locally revert release `<version>` — branch, tag, bump commit (§5.13) |
 | — | `--completions` | ✓ | Emit completion script to stdout |
 | — | `--install-completions` | optional | Install completion script; auto-detects shell (§5.7 R-COMP-6) |
+| — | `--update` | optional | Update VerBump itself to the latest or a pinned release (R-UPD, [`docs/features/update`](./features/update/requirements.md)) |
 | — | `--release` | | Publish GitHub release for the new tag (requires `-p`) |
 | — | `--` | | Stop option processing |

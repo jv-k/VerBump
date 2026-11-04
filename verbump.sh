@@ -35,6 +35,7 @@ source "$MODULE_DIR/lib/textbump.sh"
 
 source "$MODULE_DIR/lib/usage.sh"
 source "$MODULE_DIR/lib/completions.sh"
+source "$MODULE_DIR/lib/update.sh"
 source "$MODULE_DIR/lib/args.sh"
 
 source "$MODULE_DIR/lib/git-checks.sh"

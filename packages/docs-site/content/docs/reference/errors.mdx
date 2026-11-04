@@ -132,6 +132,20 @@ All preflights run before anything is mutated and exit `3`.
 | `5` | Undo declined at the confirmation prompt | Re-run with `--yes` to skip the prompt. |
 | `1` | Checkout / branch delete / tag delete failed mid-undo | Finish manually with the exact command in the hint (`git branch -D <branch>` / `git tag -d <tag>`). |
 
+## Update (`--update`)
+
+| Exit | Error | Hint |
+| ---: | --- | --- |
+| `2` | `--update=` without a version | Pass a SemVer 2.0 version, e.g. `--update=4.2.0`, or use bare `--update` for the latest release. |
+| `2` | The supplied version is not valid SemVer 2.0 | Pass a release version, e.g. `verbump --update 4.2.0`, or drop the version to get the latest release. |
+| `3` | VerBump is running from a git checkout | Run `git -C <checkout> pull` to update the checkout. |
+| `3` | VerBump was installed with Homebrew | Run `brew upgrade jv-k/tap/verbump`. |
+| `3` | VerBump was installed from npm | Run `npm install -g @jv-k/verbump@latest` (or `pnpm add -g`). A pinned version carries over as `@<version>`. |
+| `3` | VerBump cannot tell how it was installed | Re-run the install script one-liner. |
+| `3` | The install has no copy of `install.sh` (installed before `--update` existed) | Re-run the install script one-liner once. |
+| `1` | Could not create or copy to a temporary file | Check that `$TMPDIR` (or `/tmp`) is writable, then re-run `verbump --update`. |
+| installer's code | The installer failed (download, checksum, or swap) | The installer keeps your previous install when it fails; its message is printed above. Re-run `verbump --update` to retry. |
+
 ## Hooks
 
 Both hook failures exit `4` and state exactly what survived — see

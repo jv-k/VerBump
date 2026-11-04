@@ -39,7 +39,7 @@ teardown() {
 # same file set the publish workflow tars up — so fixtures can't drift from
 # what CI ships. Requires install.sh to be sourced (uses sha256_of).
 make_release_fixture() {
-  (cd "$repo_dir" && tar -czf "$FIXTURE_DIR/verbump.tar.gz" verbump.sh lib LICENSE package.json)
+  (cd "$repo_dir" && tar -czf "$FIXTURE_DIR/verbump.tar.gz" verbump.sh lib LICENSE package.json install.sh)
   printf '%s  verbump.tar.gz\n' "$(sha256_of "$FIXTURE_DIR/verbump.tar.gz")" \
     > "$FIXTURE_DIR/verbump.tar.gz.sha256"
 }

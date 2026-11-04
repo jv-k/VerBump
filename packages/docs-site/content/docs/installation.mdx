@@ -55,6 +55,29 @@ git clone https://github.com/jv-k/VerBump.git ~/.local/share/verbump
 ln -s ~/.local/share/verbump/verbump.sh ~/.local/bin/verbump   # ensure ~/.local/bin is on $PATH
 ```
 
+## Updating
+
+`verbump --update` updates VerBump to the latest release. Pass a version to
+pin one instead: `verbump --update 4.2.0`. It only touches the network when
+you run it; VerBump never checks for updates on its own.
+
+What it does depends on how VerBump was installed:
+
+| Installed with | `verbump --update` |
+| --- | --- |
+| Install script | Runs the installer that ships inside your install, against the same prefix. The download is checked against its sha256, and a failure keeps your current install. |
+| npm / pnpm | Exits 3 and prints `npm install -g @jv-k/verbump@latest` (or the `pnpm add -g` form). |
+| Homebrew | Exits 3 and prints `brew upgrade jv-k/tap/verbump`. |
+| Git clone (manual install) | Exits 3 and prints the `git pull` command for the checkout. |
+
+Add `--dry-run` to see the installer command without running it.
+
+<Callout>
+  Install-script installs from before `--update` existed do not carry a copy
+  of the installer. Re-run the `curl … | bash` one-liner once; after that,
+  `verbump --update` works.
+</Callout>
+
 ## Basher
 
 [Coming soon](https://github.com/jv-k/VerBump/issues/39).

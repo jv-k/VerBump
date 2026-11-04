@@ -82,6 +82,28 @@ normalize-long-opts() {
       exit $?
     fi
 
+    # Special case: --update [version] — update VerBump itself (R-UPD-1).
+    # Runs outside a git repo, so it exits here before any preflight. Honours
+    # --dry-run seen earlier or later in argv.
+    if [ "$arg" = "--update" ] || [[ "$arg" == "--update="* ]]; then
+      local upd_ver upd_a
+      for upd_a in "$@" "${NORMALIZED_ARGV[@]}"; do
+        case "$upd_a" in --dry-run|-d) FLAG_DRYRUN=true; break ;; esac
+      done
+      if [[ "$arg" == "--update="* ]]; then
+        upd_ver="${arg#--update=}"
+        [ -z "$upd_ver" ] && fail 2 \
+          "--update= requires a version." \
+          "Pass a SemVer 2.0 version, e.g. --update=4.2.0, or use bare --update for the latest release."
+      elif (( $# )) && [ "${1:0:1}" != "-" ]; then
+        upd_ver="$1"; shift
+      else
+        upd_ver=""
+      fi
+      do-update "$upd_ver"
+      exit $?
+    fi
+
     # Special case: --undo [version] — locally delete the release branch
     # and tag for <version>. Honours --dry-run and --yes seen earlier or
     # later in argv. Exits immediately.

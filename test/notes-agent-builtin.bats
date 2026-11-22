@@ -7,8 +7,9 @@
 # runs the agent with the key; otherwise the release falls back with a
 # warning. These tests run a live --release through the full CLI with stub
 # `claude` and `codex` executables on PATH. Each stub answers its status
-# command as STUB_AUTH says (subscription, key or out) and records under
-# AGENT_REC the flags it got, whether the provider key was set, and its stdin.
+# command as STUB_AUTH says (subscription, key or out), or as STUB_AUTH_CLAUDE
+# / STUB_AUTH_CODEX says for that agent alone, and records under AGENT_REC
+# the flags it got, whether the provider key was set, and its stdin.
 
 load 'test_helper'
 load 'release_notes_helper'
@@ -19,12 +20,12 @@ STUB_EMAIL="stub-account@example.com"
 STUB_ORG="Stub Org Ltd"
 
 # Write stub `claude` and `codex` executables into <dir>. A run (not a status
-# check) writes its arguments one per line to $AGENT_REC/argv, "set" or
-# nothing for its provider key to $AGENT_REC/key, and its stdin to
-# $AGENT_REC/stdin. It prints progress on stdout and stderr, and its final
-# message ($AGENT_OUT) the way the real CLI does: claude as the result field
-# of its --output-format json object, codex to the --output-last-message
-# file (and to stdout, like codex exec).
+# check) appends its name to $AGENT_REC/ran, writes its arguments one per
+# line to $AGENT_REC/argv, "set" or nothing for its provider key to
+# $AGENT_REC/key, and its stdin to $AGENT_REC/stdin. It prints progress on
+# stdout and stderr, and its final message ($AGENT_OUT) the way the real CLI
+# does: claude as the result field of its --output-format json object, codex
+# to the --output-last-message file (and to stdout, like codex exec).
 builtin_agent_stubs() {
   local dir=$1
   cat > "${dir}/claude" <<'SH'
@@ -32,7 +33,7 @@ builtin_agent_stubs() {
 if [ "$1" = auth ] && [ "$2" = status ]; then
   echo "ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY+set}" >> "${AGENT_REC}/status"
   logged=false method=none
-  case "${STUB_AUTH-}" in
+  case "${STUB_AUTH_CLAUDE-${STUB_AUTH-}}" in
     subscription) logged=true method=claude.ai ;;
     key) [ -n "${ANTHROPIC_API_KEY-}" ] && logged=true method=api_key ;;
   esac
@@ -42,6 +43,7 @@ if [ "$1" = auth ] && [ "$2" = status ]; then
   [ "$logged" = true ]
   exit
 fi
+echo claude >> "${AGENT_REC}/ran"
 for a in "$@"; do printf '%s\n' "$a"; done > "${AGENT_REC}/argv"
 printf '%s' "${ANTHROPIC_API_KEY+set}" > "${AGENT_REC}/key"
 cat > "${AGENT_REC}/stdin"
@@ -54,7 +56,7 @@ SH
 #!/bin/sh
 if [ "$1" = login ] && [ "$2" = status ]; then
   echo "OPENAI_API_KEY=${OPENAI_API_KEY+set}" >> "${AGENT_REC}/status"
-  case "${STUB_AUTH-}" in
+  case "${STUB_AUTH_CODEX-${STUB_AUTH-}}" in
     subscription)
       echo "Logged in using ChatGPT (${STUB_EMAIL}, ${STUB_ORG})" >&2
       exit 0 ;;
@@ -67,6 +69,7 @@ if [ "$1" = login ] && [ "$2" = status ]; then
   echo "Not logged in" >&2
   exit 1
 fi
+echo codex >> "${AGENT_REC}/ran"
 for a in "$@"; do printf '%s\n' "$a"; done > "${AGENT_REC}/argv"
 printf '%s' "${OPENAI_API_KEY+set}" > "${AGENT_REC}/key"
 cat > "${AGENT_REC}/stdin"
@@ -88,6 +91,10 @@ SH
 # shim and the stubs (SHIM, one PATH entry for both) and AGENT_REC.
 builtin_agent_repo() {
   releasable_repo
+  # One "version" line, so the bump makes no unrelated warning and a test
+  # can assert that a run prints no warning at all.
+  printf '{\n  "version": "1.2.3"\n}\n' > package.json
+  git commit -qam "chore: format package.json"
   printf 'feature\n' > feature.txt
   git add feature.txt
   git commit -qm "feat: add the feature file"
@@ -103,14 +110,18 @@ builtin_agent_repo() {
 
 # run_builtin <agent> [VAR=value …]: `run` a live --release with
 # RELEASE_NOTES_AGENT=<agent>, both provider keys unset unless a VAR=value
-# sets one, and STUB_AUTH / AGENT_OUT from the caller's prefix. VB_PATH
-# replaces PATH when set (the not-installed case).
+# sets one, and STUB_AUTH / STUB_AUTH_CLAUDE / STUB_AUTH_CODEX / AGENT_OUT /
+# AGENT_RC from the caller's prefix (an unset per-agent auth stays unset, so
+# the stub falls back to STUB_AUTH). VB_PATH replaces PATH when set (the
+# not-installed case).
 run_builtin() {
   local agent=$1
   shift
   run env -u ANTHROPIC_API_KEY -u OPENAI_API_KEY \
     PATH="${VB_PATH:-${SHIM}:$PATH}" GH_ARGV_DIR="${SHIM}/argv" AGENT_REC="$AGENT_REC" \
-    STUB_AUTH="${STUB_AUTH-}" AGENT_OUT="${AGENT_OUT-}" \
+    STUB_AUTH="${STUB_AUTH-}" ${STUB_AUTH_CLAUDE+STUB_AUTH_CLAUDE="$STUB_AUTH_CLAUDE"} \
+    ${STUB_AUTH_CODEX+STUB_AUTH_CODEX="$STUB_AUTH_CODEX"} \
+    AGENT_OUT="${AGENT_OUT-}" AGENT_RC="${AGENT_RC:-0}" \
     STUB_EMAIL="$STUB_EMAIL" STUB_ORG="$STUB_ORG" \
     VERBUMP_RELEASE_NOTES_CMD='' RELEASE_NOTES_AGENT="$agent" "$@" \
     "${profile_script}" --release -p "$REMOTE" -b -c -v 1.3.0 </dev/null
@@ -343,4 +354,122 @@ path_without_agents() {
 
   refute_output --partial "Notes agent:"
   assert_gh_argv "${SHIM}/argv" release create v1.3.0 --notes KEY=sk-caller
+}
+
+# ── RELEASE_NOTES_AGENT=auto (#165, R-REL-19) ───────────────────────────────
+# auto tries claude, then codex, with the availability rules above; the
+# first available agent writes the notes. $AGENT_REC/ran names every agent
+# that ran (a status check is not a run).
+
+@test "auto agent: with claude and codex both logged in, claude writes the notes (#165)" {
+  builtin_agent_repo
+
+  STUB_AUTH=subscription AGENT_OUT="AUTO-NOTES" run_builtin auto
+  assert_success
+  strip_ansi_output
+
+  assert_output --partial "Notes agent: claude (subscription)"
+  assert_output --partial "Release notes written by notes agent 'claude':"
+  run cat "${AGENT_REC}/ran"
+  assert_output "claude"
+  assert_gh_argv "${SHIM}/argv" release create v1.3.0 --notes AUTO-NOTES
+}
+
+@test "auto agent: with claude logged out and codex logged in, codex writes the notes (#165)" {
+  builtin_agent_repo
+
+  STUB_AUTH_CLAUDE=out STUB_AUTH_CODEX=subscription AGENT_OUT="AUTO-NOTES" run_builtin auto
+  assert_success
+  strip_ansi_output
+
+  assert_output --partial "Notes agent: codex (subscription)"
+  assert_output --partial "Release notes written by notes agent 'codex':"
+  # Passing over claude is not a failure: no warning names it.
+  refute_output --partial "Notes agent 'claude'"
+  run cat "${AGENT_REC}/ran"
+  assert_output "codex"
+  assert_gh_argv "${SHIM}/argv" release create v1.3.0 --notes AUTO-NOTES
+}
+
+@test "auto agent: with claude not installed and codex logged in, codex writes the notes (#165)" {
+  builtin_agent_repo
+  rm "${SHIM}/claude"
+
+  STUB_AUTH=subscription AGENT_OUT="AUTO-NOTES" VB_PATH=$(path_without_agents) run_builtin auto
+  assert_success
+  strip_ansi_output
+
+  assert_output --partial "Notes agent: codex (subscription)"
+  refute_output --partial "is not installed"
+  run cat "${AGENT_REC}/ran"
+  assert_output "codex"
+  assert_gh_argv "${SHIM}/argv" release create v1.3.0 --notes AUTO-NOTES
+}
+
+@test "auto agent: with neither agent available, one info line and no warning, the fallback notes and exit 0 (#165)" {
+  local setup
+
+  # Both logged out with no key, then neither installed: each in a fresh repo.
+  for setup in logged-out not-installed; do
+    builtin_agent_repo
+    if [ "$setup" = not-installed ]; then
+      rm "${SHIM}/claude" "${SHIM}/codex"
+      VB_PATH=$(path_without_agents)
+    fi
+
+    STUB_AUTH=out AGENT_OUT="NOTES" run_builtin auto
+    VB_PATH=""
+    assert_success
+    strip_ansi_output
+
+    assert_line --partial "No notes agent found (RELEASE_NOTES_AGENT=auto)"
+    # Keep the run's output: each `run` below replaces $output.
+    local release_out=$output
+    run grep -c "No notes agent found" <<< "$release_out"
+    assert_output 1
+    # No line in the run is a warning ("!" after the gutter).
+    run grep -E '^[[:space:]]*! ' <<< "$release_out"
+    assert_failure 1
+    [ ! -f "${AGENT_REC}/ran" ] || bats_fail "an agent ran (${setup})"
+    assert_gh_argv "${SHIM}/argv" release create v1.3.0 --generate-notes --notes-start-tag v1.2.3
+  done
+}
+
+@test "auto agent: a picked agent that fails warns, publishes the fallback, and the other agent never runs (#165)" {
+  local cause
+
+  # claude is picked (both logged in); its run fails in each way R-REL-13
+  # names. codex is never asked, not even for its login status.
+  local -a causes=(exit empty timeout)
+  local -a warnings=("exited 3" "returned empty or whitespace-only output" "timed out after 1s")
+  local i
+  for i in 0 1 2; do
+    cause=${causes[$i]}
+    builtin_agent_repo
+    case $cause in
+      exit)
+        STUB_AUTH=subscription AGENT_OUT="NOTES" AGENT_RC=3 run_builtin auto
+        ;;
+      empty)
+        STUB_AUTH=subscription AGENT_OUT="" run_builtin auto
+        ;;
+      timeout)
+        # A claude that hangs past a 1 s timeout.
+        printf '#!/bin/sh\n[ "$1" = auth ] && { echo "{\\"loggedIn\\":true}"; exit 0; }\necho claude >> "${AGENT_REC}/ran"\nsleep 30\n' > "${SHIM}/claude"
+        STUB_AUTH=subscription run_builtin auto RELEASE_NOTES_AGENT_TIMEOUT=1
+        ;;
+    esac
+    assert_success
+    strip_ansi_output
+
+    assert_output --partial "Notes agent 'claude' ${warnings[$i]}"
+    refute_output --partial "Notes agent: codex"
+    run cat "${AGENT_REC}/ran"
+    assert_output "claude"
+    if [ -f "${AGENT_REC}/status" ]; then
+      run grep -c OPENAI_API_KEY "${AGENT_REC}/status"
+      assert_output 0
+    fi
+    assert_gh_argv "${SHIM}/argv" release create v1.3.0 --generate-notes --notes-start-tag v1.2.3
+  done
 }

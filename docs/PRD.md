@@ -218,6 +218,7 @@ Each requirement has an ID so tests and PRs can reference it.
 | **R-REL-16** | `RELEASE_NOTES_AGENT=claude` or `=codex` names a **built-in** notes agent, available when its executable is on `PATH` and its login-status command (`claude auth status`, `codex login status`) reports a login. Subscription first: the status check runs with the provider key (`ANTHROPIC_API_KEY` / `OPENAI_API_KEY`) unset, and a login means the agent runs with that key unset in its own process only; otherwise a set key runs the agent with the key; otherwise the agent is not available. Detection never prints account details. |
 | **R-REL-17** | A built-in agent runs non-interactively with tools off and no saved session (`codex` also in a read-only sandbox with no git-repo check). Only its final message becomes the notes. An info line names the agent and the auth mode, e.g. `Notes agent: claude (subscription)`. |
 | **R-REL-18** | A built-in agent that is not installed, or neither logged in nor given a key, prints one warning and publishes the fallback notes (R-REL-13); it never exits `3`. A custom command keeps the caller's environment. |
+| **R-REL-19** | `RELEASE_NOTES_AGENT=auto` tries `claude`, then `codex` (R-REL-16), and the first available agent writes the notes. Neither available prints one info line, no warning, and publishes the fallback notes with exit `0`. A picked agent that fails falls back with a warning (R-REL-13); the other agent is not tried. |
 
 ### 5.9 Developer harness
 

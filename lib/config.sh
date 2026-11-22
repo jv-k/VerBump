@@ -36,7 +36,8 @@ true
 #                 package in a monorepo. Default "." — a root rc, or no rc,
 #                 resolves to the repo root = whole-repo behaviour, R-MONO-1)
 #   RELEASE_NOTES_AGENT (notes agent for --release notes: off, the default;
-#                        claude or codex, the built-in agents, R-REL-16; or
+#                        claude or codex, the built-in agents, R-REL-16;
+#                        auto, the first available of the two, R-REL-19; or
 #                        a command that reads the prompt on stdin;
 #                        VERBUMP_RELEASE_NOTES_CMD wins over it, R-REL-10)
 #   RELEASE_NOTES_PROMPT (guidance appended to the notes agent's built-in

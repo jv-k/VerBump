@@ -303,10 +303,12 @@ check-pr-deps() {
 # With --fallback, skip the custom command and the agent and resolve only the
 # notes a release publishes without a notes agent (ADR-24). A notes agent that
 # fails prints one warning naming the cause and falls through to those notes
-# (R-REL-13). A custom command runs in dry-run too, so the preview reflects
-# real output (R-REL-5). If it exits non-zero, fail 1 with its stderr; the tag
-# push already happened and is intentionally NOT rolled back (R-REL-6). Call it
-# directly, never in $(...): the results are globals and `fail` must exit.
+# (R-REL-13); RELEASE_NOTES_AGENT=auto that finds no agent prints one info
+# line instead and falls through the same way (R-REL-19). A custom command
+# runs in dry-run too, so the preview reflects real output (R-REL-5). If it
+# exits non-zero, fail 1 with its stderr; the tag push already happened and
+# is intentionally NOT rolled back (R-REL-6). Call it directly, never in
+# $(...): the results are globals and `fail` must exit.
 resolve-release-notes() {
   local notes_cmd="${VERBUMP_RELEASE_NOTES_CMD:-}"
   local agent="${RELEASE_NOTES_AGENT:-off}"
@@ -317,13 +319,22 @@ resolve-release-notes() {
   RELEASE_NOTES_ARGS=()
 
   if [ -z "$notes_cmd" ] && [ "$agent" != off ]; then
-    if run-notes-agent "$agent"; then
-      RELEASE_NOTES_KIND="agent"
-      RELEASE_NOTES_TEXT="$NOTES_AGENT_OUTPUT"
-      RELEASE_NOTES_ARGS=(--notes "$RELEASE_NOTES_TEXT")
-      return 0
-    fi
-    log_warn "Notes agent '${S_VAL-}${agent}${RESET-}' ${NOTES_AGENT_ERROR} — publishing the release notes this release has without a notes agent."
+    local agent_rc=0
+    run-notes-agent "$agent" || agent_rc=$?
+    case $agent_rc in
+      0)
+        RELEASE_NOTES_KIND="agent"
+        RELEASE_NOTES_TEXT="$NOTES_AGENT_OUTPUT"
+        RELEASE_NOTES_ARGS=(--notes "$RELEASE_NOTES_TEXT")
+        return 0
+        ;;
+      2)
+        log_info "No notes agent found (RELEASE_NOTES_AGENT=${S_VAL-}auto${RESET-}) — publishing the release notes this release has without a notes agent."
+        ;;
+      *)
+        log_warn "Notes agent '${S_VAL-}${NOTES_AGENT_NAME}${RESET-}' ${NOTES_AGENT_ERROR} — publishing the release notes this release has without a notes agent."
+        ;;
+    esac
   fi
 
   if [ -n "$notes_cmd" ]; then
@@ -401,7 +412,7 @@ do-github-release() {
   # Agent notes are printed before they are published (R-REL-12): no review
   # prompt, so the run output is where the maintainer reads them.
   if [ "$RELEASE_NOTES_KIND" = agent ]; then
-    log_info "Release notes written by notes agent '${S_VAL-}${RELEASE_NOTES_AGENT}${RESET-}':"
+    log_info "Release notes written by notes agent '${S_VAL-}${NOTES_AGENT_NAME}${RESET-}':"
     printf '%s\n' "$RELEASE_NOTES_TEXT"
   fi
 

@@ -41,6 +41,14 @@ verbump --minor --dry-run --json > plan.json
 `--json` is preview-only: it requires `--dry-run`, and real runs keep their
 normal output.
 
+### Release notes preview
+
+With `--release`, the dry run prints the `gh release create` command it would
+run. When `RELEASE_NOTES_AGENT` is set, it names the notes agent that would
+write the notes and the fallback, but never runs the agent, so the preview
+spends no tokens. See
+[AI-written release notes](/docs/guides/release-notes#dry-run).
+
 ## Undo
 
 `--undo [<version>]` deletes an unpushed release's tag, plus its

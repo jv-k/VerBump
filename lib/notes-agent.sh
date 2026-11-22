@@ -92,13 +92,14 @@ _NOTES_CALLER_TRAPS=""
 # The run's scratch directory (prompt, output), outside the agent's own
 # empty directory; the codex adapter writes its final message there.
 _NOTES_AGENT_SCRATCH=""
-# Set by _resolve-notes-builtin for a built-in agent: the auth mode the info
-# line names and the command that runs the agent.
-_NOTES_AGENT_AUTH=""
+# Set by pick-notes-agent: the command that runs the picked agent.
 _NOTES_AGENT_CMD=""
-# Set by run-notes-agent: the agent that ran or was tried, for the lines that
-# name it — the built-in agent auto picked, else RELEASE_NOTES_AGENT as given.
+# Set by pick-notes-agent: the agent that runs or was tried, for the lines
+# that name it — the built-in agent auto picked, else RELEASE_NOTES_AGENT as
+# given — and, for a built-in agent, the auth mode those lines name
+# ("subscription" or "API key"; empty for a custom command).
 NOTES_AGENT_NAME=""
+NOTES_AGENT_AUTH=""
 
 # Set _NOTES_AGENT_TIMEOUT_S to RELEASE_NOTES_AGENT_TIMEOUT when it is a
 # positive integer; otherwise warn and use the default. Leading zeros are
@@ -198,10 +199,12 @@ _notes-builtin-logged-in() {
 # provider key unset, in a subshell: a login then means a subscription, and
 # the agent runs with the key unset in its own process only, so the
 # subscription is billed, not the key. Otherwise a set key runs the agent
-# with the key (CI). Sets _NOTES_AGENT_AUTH to "subscription" or "API key"
+# with the key (CI). Sets NOTES_AGENT_AUTH to "subscription" or "API key"
 # and _NOTES_AGENT_CMD to the command to eval; or, when the agent is not
 # installed or has neither, sets NOTES_AGENT_ERROR and returns 1 (a warning
 # and the fallback, never exit 3).
+# SC2034: NOTES_AGENT_AUTH is read by do-github-release in another file.
+# shellcheck disable=SC2034
 _resolve-notes-builtin() {
   local agent=$1 key_var
   key_var=$(_notes-builtin-key-var "$agent")
@@ -210,10 +213,10 @@ _resolve-notes-builtin() {
     return 1
   fi
   if ( unset "$key_var"; _notes-builtin-logged-in "$agent" ); then
-    _NOTES_AGENT_AUTH="subscription"
+    NOTES_AGENT_AUTH="subscription"
     _NOTES_AGENT_CMD="unset ${key_var}; _notes-agent-${agent}"
   elif [ -n "${!key_var-}" ]; then
-    _NOTES_AGENT_AUTH="API key"
+    NOTES_AGENT_AUTH="API key"
     _NOTES_AGENT_CMD="_notes-agent-${agent}"
   else
     NOTES_AGENT_ERROR="is not logged in and ${key_var} is not set"
@@ -223,7 +226,7 @@ _resolve-notes-builtin() {
 
 # RELEASE_NOTES_AGENT=auto (R-REL-19): pick the first available built-in
 # agent, claude then codex, by the rules of _resolve-notes-builtin. Sets
-# NOTES_AGENT_NAME to it, with _NOTES_AGENT_AUTH / _NOTES_AGENT_CMD as
+# NOTES_AGENT_NAME to it, with NOTES_AGENT_AUTH / _NOTES_AGENT_CMD as
 # _resolve-notes-builtin left them; or returns 1 when neither is available.
 # An unavailable agent is not an error here, so its NOTES_AGENT_ERROR is
 # cleared. Only the pick moves on to codex: once an agent is picked, a
@@ -238,6 +241,27 @@ _resolve-notes-auto() {
     NOTES_AGENT_ERROR=""
   done
   return 1
+}
+
+# Pick the notes agent <agent> names, without running it: the first step of
+# run-notes-agent, and all that a dry run does (ADR-24, R-REL-20). A built-in
+# name (claude, codex) resolves as _resolve-notes-builtin decides, so its
+# status check runs; auto picks as _resolve-notes-auto does; any other value
+# is a custom command, picked as given and never checked. Sets
+# NOTES_AGENT_NAME, NOTES_AGENT_AUTH and _NOTES_AGENT_CMD, and returns 0.
+# When a built-in agent is not available, sets NOTES_AGENT_ERROR and returns
+# 1; when auto finds no agent, returns 2 with no error.
+# SC2034: NOTES_AGENT_ERROR, NOTES_AGENT_NAME and NOTES_AGENT_AUTH are read in
+# lib/git-actions.sh.
+# shellcheck disable=SC2034
+pick-notes-agent() {
+  local agent=$1
+  NOTES_AGENT_ERROR="" NOTES_AGENT_NAME=$agent NOTES_AGENT_AUTH=""
+  _NOTES_AGENT_CMD=$agent
+  case $agent in
+    auto) _resolve-notes-auto || return 2 ;;
+    claude|codex) _resolve-notes-builtin "$agent" || return 1 ;;
+  esac
 }
 
 # Run claude on the prompt (stdin): print mode, no built-in tools, no MCP
@@ -297,10 +321,10 @@ _notes-agent-watchdog() {
   kill -KILL 0
 }
 
-# Run the notes agent <cmd> on the built prompt. A built-in name (claude,
-# codex) runs that CLI as _resolve-notes-builtin decides, after an info line
-# that names the agent and the auth mode; auto first picks one of them
-# (_resolve-notes-auto). Any other value is eval'd, like
+# Pick the notes agent <cmd> with pick-notes-agent, then run it on the built
+# prompt. A built-in name (claude, codex) runs that CLI as
+# _resolve-notes-builtin decides, after an info line that names the agent and
+# the auth mode; auto runs the one it picked. Any other value is eval'd, like
 # VERBUMP_RELEASE_NOTES_CMD, so a value such as 'gemini -p' or
 # 'llm -m mymodel' splits into its arguments. It reads the prompt on stdin and
 # runs in a fresh empty temporary directory, so it has no repo to read or
@@ -322,24 +346,16 @@ _notes-agent-watchdog() {
 # SC2034: NOTES_AGENT_ERROR is read by resolve-release-notes in another file.
 # shellcheck disable=SC2034
 run-notes-agent() {
-  local cmd=$1 scratch workdir rc had_monitor=false
-  NOTES_AGENT_OUTPUT="" NOTES_AGENT_ERROR="" NOTES_AGENT_NAME=$cmd
+  local cmd scratch workdir rc had_monitor=false
+  NOTES_AGENT_OUTPUT=""
 
-  # auto picks before the timeout is read: when it finds no agent, nothing
-  # runs, so the run prints only the caller's info line.
-  if [ "$cmd" = auto ]; then
-    _resolve-notes-auto || return 2
-  fi
+  # The pick comes before the timeout is read: when no agent is available,
+  # nothing runs, so the run prints only the caller's info line or warning.
+  pick-notes-agent "$1" || return
   _resolve-notes-agent-timeout
-
-  case $NOTES_AGENT_NAME in
-    claude|codex)
-      # auto has resolved its pick already; a named agent resolves here.
-      [ "$cmd" = auto ] || _resolve-notes-builtin "$cmd" || return 1
-      log_info "Notes agent: ${S_VAL-}${NOTES_AGENT_NAME}${RESET-} (${_NOTES_AGENT_AUTH})"
-      cmd=$_NOTES_AGENT_CMD
-      ;;
-  esac
+  [ -n "$NOTES_AGENT_AUTH" ] \
+    && log_info "Notes agent: ${S_VAL-}${NOTES_AGENT_NAME}${RESET-} (${NOTES_AGENT_AUTH})"
+  cmd=$_NOTES_AGENT_CMD
 
   # Prompt and output live outside the agent's directory, so it starts empty.
   scratch=$(mktemp -d) || { NOTES_AGENT_ERROR="could not start (mktemp failed)"; return 1; }

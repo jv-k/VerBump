@@ -5,6 +5,7 @@
     "version-suggestion",
     "bump-targets",
     "changelog",
+    "release-notes",
     "monorepos",
     "hooks",
     "dry-run-undo",

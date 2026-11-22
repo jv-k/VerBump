@@ -52,7 +52,7 @@ the stable core (`1.2.3-dev.5 --patch` → `1.2.4`) — the full rules live in
 | `-p`, `--push <remote>` | Push the commit and tag (and release branch, with `--branch` / `--pr`) to `<remote>` at the end of the run, with no prompt. Without `-p`, VerBump asks before it pushes. A failed push exits `1`. |
 | `--pr` | Branch, push, and open a release PR via `gh` (GitHub-only, and implies push to origin). |
 | `--base <branch>` | Base branch for `--pr` (GitHub-only, default: the branch you ran VerBump from). |
-| `--release` | Publish a GitHub release for the new tag (GitHub-only, requires `-p`, uses `gh`). The notes come from `gh --generate-notes`, from `VERBUMP_RELEASE_NOTES_CMD` when it is set, or from a notes agent when `RELEASE_NOTES_AGENT` is set — see [AI-written release notes](/docs/guides/release-notes). |
+| `--release` | Publish a GitHub release for the new tag (GitHub-only, requires `-p`, uses `gh`). The notes come from `gh --generate-notes` (the package's changelog entry in a [monorepo package](/docs/guides/monorepos#github-releases-in-a-monorepo)), from `VERBUMP_RELEASE_NOTES_CMD` when it is set, or from a notes agent when `RELEASE_NOTES_AGENT` is not `off` — see [AI-written release notes](/docs/guides/release-notes). |
 | `--branch` | Cut a `release-<version>` branch instead of tagging the current branch in place. |
 | `-B`, `--branch-prefix <prefix>` | Override the branch prefix (default: `release-`). |
 | `-b`, `--no-branch` | Deprecated no-op. Tag-in-place is the default now. |

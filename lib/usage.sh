@@ -340,7 +340,7 @@ usage() {
   print-opt-row ""   "--pr"            ""            "Branch + push + open a release PR via 'gh' (GitHub-only; implies push to origin)."
   print-opt-row ""   "--base"          "<branch>"    "Base branch for --pr (GitHub-only; default: the branch you ran VerBump from)."
   print-opt-row ""   "--release"       ""            "Publish a GitHub release for the new tag (GitHub-only; requires -p, uses 'gh')."
-  print-opt-cont "Notes: gh --generate-notes, VERBUMP_RELEASE_NOTES_CMD, or a notes agent set by RELEASE_NOTES_AGENT (auto, claude, codex or a command)."
+  print-opt-cont "Notes: gh --generate-notes (a monorepo package: its changelog entry), VERBUMP_RELEASE_NOTES_CMD, or a notes agent set by RELEASE_NOTES_AGENT (auto, claude, codex or a command)."
   print-opt-row ""   "--branch"        ""            "Cut a release-x.x.x branch (pre-2.0 default); otherwise tag in place."
   print-opt-row "-B" "--branch-prefix" "<prefix>"    "Override branch prefix (default: release-)."
   print-opt-row "-b" "--no-branch"     ""            "(deprecated) Tag-in-place is the default now; this is a no-op."

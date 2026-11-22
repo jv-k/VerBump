@@ -5,7 +5,9 @@ description: Let claude, codex or another LLM write the notes for a --release ru
 
 With [`--release`](/docs/reference/cli#push-branch--publish), VerBump
 publishes a GitHub release for the new tag. By default the notes come from
-GitHub's generator (`gh release create --generate-notes`). Set
+GitHub's generator (`gh release create --generate-notes`), or, for a
+[monorepo package](/docs/guides/monorepos#github-releases-in-a-monorepo),
+from the package's changelog entry. Set
 `RELEASE_NOTES_AGENT` and a **notes agent**, an LLM command line tool, writes
 them instead. VerBump gives it a fixed prompt and the release's context, then
 publishes what it returns.
@@ -87,8 +89,9 @@ and stdout keeps only the version.
 | `codex` | Codex CLI, run as `codex exec` in a read-only sandbox, with no shell or web search tool, without your `config.toml` and with no saved session |
 | `auto` | `claude` if it is available, else `codex` |
 
-A built-in agent is **available** when its executable is on `PATH` and it is
-logged in, or when its provider API key is set. Both agents use their CLI's
+A built-in agent is **available** when its executable is on `PATH`, and it
+is logged in or its provider API key is set. An agent that is not installed
+is never available, even with the key set. Both agents use their CLI's
 default model. To choose a model, use a [custom command](#custom-commands).
 
 `auto` tries `claude` first, then `codex`. It passes over an agent that is not
@@ -180,8 +183,8 @@ RELEASE_NOTES_AGENT='llm -m gpt-4o-mini'
 # A local model through Ollama
 RELEASE_NOTES_AGENT='ollama run llama3.2'
 
-# Claude Code on a pinned model, with tools off
-RELEASE_NOTES_AGENT="env -u ANTHROPIC_API_KEY claude -p --model sonnet --tools ''"
+# Claude Code on a pinned model, with no tools and no MCP servers
+RELEASE_NOTES_AGENT="env -u ANTHROPIC_API_KEY claude -p --model sonnet --tools '' --strict-mcp-config"
 ```
 
 VerBump runs a custom command with your environment unchanged. It does not
@@ -217,7 +220,9 @@ name, or `null`) and `fallback` (`generated` or `changelog`):
 ## `VERBUMP_RELEASE_NOTES_CMD`
 
 The older `VERBUMP_RELEASE_NOTES_CMD` environment variable still works and
-wins over `RELEASE_NOTES_AGENT`. It differs in two ways: it gets no prompt or
-context, and when it fails the run stops with exit `1`, after the tag push.
-A notes agent falls back instead. A custom notes command also runs during a
-dry run, so the preview shows its real output.
+wins over `RELEASE_NOTES_AGENT`. It differs from a notes agent in three ways:
+
+- it gets no prompt or context;
+- when it fails, the run stops with exit `1`, after the tag push, where a
+  notes agent falls back;
+- it also runs during a dry run, so the preview shows its real output.

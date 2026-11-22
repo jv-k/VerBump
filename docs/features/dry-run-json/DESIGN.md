@@ -67,7 +67,7 @@ action-specific fields. All values are strings unless noted:
 | `tag` | `ref`, `annotated` (**bool**, always `true`), `signed` (**bool**), `message` | `do-tag` |
 | `push` | `remote`, `branch`, `tag` | `do-push` |
 | `open-pr` | `head`, `base`, `title` | `do-pr` |
-| `github-release` | `tag`, `notes` (`generated` \| `changelog` \| `command` \| `agent`), `prerelease` (**bool**), `agent` (the notes agent a live run would call, or `null`), `fallback` (`generated` \| `changelog`: the notes published without a notes agent) | `do-github-release` |
+| `github-release` | `tag`, `notes` (`generated` \| `changelog` \| `command` \| `agent`), `prerelease` (**bool**), `agent` (the notes agent a live run would call, or `null`), `fallback` (`generated` \| `changelog`: the notes published without a custom command or a notes agent, set even when a command wins) | `do-github-release` |
 
 A no-op run (nothing to release) emits **nothing** on stdout and exits 0 —
 `[ -s plan.json ]` is the "a release would happen" test, mirroring R-OUT-4.

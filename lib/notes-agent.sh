@@ -251,7 +251,8 @@ _resolve-notes-auto() {
 # NOTES_AGENT_NAME, NOTES_AGENT_AUTH and _NOTES_AGENT_CMD, and returns 0.
 # When a built-in agent is not available, sets NOTES_AGENT_ERROR and returns
 # 1; when auto finds no agent, returns 2 with no error.
-# SC2034: NOTES_AGENT_ERROR is read by resolve-release-notes in another file.
+# SC2034: NOTES_AGENT_ERROR, NOTES_AGENT_NAME and NOTES_AGENT_AUTH are read in
+# lib/git-actions.sh.
 # shellcheck disable=SC2034
 pick-notes-agent() {
   local agent=$1
@@ -320,8 +321,8 @@ _notes-agent-watchdog() {
   kill -KILL 0
 }
 
-# Run the notes agent <cmd> on the built prompt, after pick-notes-agent has
-# picked it. A built-in name (claude, codex) runs that CLI as
+# Pick the notes agent <cmd> with pick-notes-agent, then run it on the built
+# prompt. A built-in name (claude, codex) runs that CLI as
 # _resolve-notes-builtin decides, after an info line that names the agent and
 # the auth mode; auto runs the one it picked. Any other value is eval'd, like
 # VERBUMP_RELEASE_NOTES_CMD, so a value such as 'gemini -p' or

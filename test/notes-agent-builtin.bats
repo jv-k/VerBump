@@ -626,28 +626,25 @@ github_release_effect() {
   refute_output 0
 }
 
-@test "dry-run agent: with RELEASE_NOTES_AGENT=off the dry-run release lines are today's (#166)" {
+@test "dry-run agent: with RELEASE_NOTES_AGENT=off, or a custom command that wins, the [dry-run] lines are today's (#166)" {
   local -a RUN_FLAGS=(-d)
-  local agent
 
-  for agent in off auto; do
-    builtin_agent_repo
-    # auto with a custom VERBUMP_RELEASE_NOTES_CMD: the command wins, as today.
-    if [ "$agent" = auto ]; then
-      STUB_AUTH=subscription run_builtin auto VERBUMP_RELEASE_NOTES_CMD='echo CMD-NOTES'
-    else
-      STUB_AUTH=subscription run_builtin off
-    fi
-    assert_success
-    strip_ansi_output
-    if [ "$agent" = auto ]; then
-      assert_line "[dry-run] would run: gh release create v1.3.0 --notes 'CMD-NOTES'"
-    else
-      assert_line "[dry-run] would run: gh release create v1.3.0 --generate-notes --notes-start-tag v1.2.3"
-    fi
-    refute_output --partial "notes agent"
-    refute_output --partial "Notes agent"
-    # off never asks for a login status.
-    [ "$agent" = auto ] || [ ! -e "${AGENT_REC}/status" ] || bats_fail "off ran a status check"
-  done
+  builtin_agent_repo
+  STUB_AUTH=subscription run_builtin off
+  assert_success
+  strip_ansi_output
+  assert_line "[dry-run] would run: gh release create v1.3.0 --generate-notes --notes-start-tag v1.2.3"
+  refute_output --partial "notes agent"
+  refute_output --partial "Notes agent"
+  # off never asks for a login status.
+  [ ! -e "${AGENT_REC}/status" ] || bats_fail "off ran a status check"
+
+  # A custom VERBUMP_RELEASE_NOTES_CMD still runs and beats auto, as today.
+  builtin_agent_repo
+  STUB_AUTH=subscription run_builtin auto VERBUMP_RELEASE_NOTES_CMD='echo CMD-NOTES'
+  assert_success
+  strip_ansi_output
+  assert_line "[dry-run] would run: gh release create v1.3.0 --notes 'CMD-NOTES'"
+  refute_output --partial "notes agent"
+  refute_output --partial "Notes agent"
 }

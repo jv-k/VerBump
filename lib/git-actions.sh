@@ -293,7 +293,8 @@ check-pr-deps() {
 #   RELEASE_NOTES_TEXT       the notes body; empty when gh generates it
 #   RELEASE_NOTES_ARGS       the matching `gh release create` notes flags
 #   RELEASE_NOTES_FALLBACK   "changelog" | "generated": the kind of notes the
-#                            release publishes without a notes agent
+#                            release publishes without a custom command or a
+#                            notes agent (set even when a command wins)
 #   RELEASE_NOTES_NO_AGENT   true when the run asks for a notes agent and none
 #                            is available, else false
 # Sources, in precedence order: a custom $VERBUMP_RELEASE_NOTES_CMD beats
@@ -318,7 +319,7 @@ check-pr-deps() {
 # `fail` must exit.
 resolve-release-notes() {
   local notes_cmd="${VERBUMP_RELEASE_NOTES_CMD:-}"
-  local agent="${RELEASE_NOTES_AGENT:-off}" picked=false
+  local agent="${RELEASE_NOTES_AGENT:-off}" dry="${FLAG_DRYRUN:-false}" picked=false
   [ "${1-}" = --fallback ] && notes_cmd="" agent=off
   RELEASE_NOTES_KIND="" RELEASE_NOTES_TEXT="" RELEASE_NOTES_NO_AGENT=false
   RELEASE_NOTES_ARGS=()
@@ -327,25 +328,23 @@ resolve-release-notes() {
 
   if [ -z "$notes_cmd" ] && [ "$agent" != off ]; then
     local agent_rc=0
-    if [ "${FLAG_DRYRUN:-false}" = true ]; then
+    if [ "$dry" = true ]; then
       pick-notes-agent "$agent" || agent_rc=$?
+      [ "$agent_rc" -eq 0 ] && picked=true
     else
       run-notes-agent "$agent" || agent_rc=$?
+      if [ "$agent_rc" -eq 0 ]; then
+        RELEASE_NOTES_KIND="agent"
+        RELEASE_NOTES_TEXT="$NOTES_AGENT_OUTPUT"
+        RELEASE_NOTES_ARGS=(--notes "$RELEASE_NOTES_TEXT")
+        return 0
+      fi
     fi
     case $agent_rc in
-      0)
-        if [ "${FLAG_DRYRUN:-false}" = true ]; then
-          picked=true
-        else
-          RELEASE_NOTES_KIND="agent"
-          RELEASE_NOTES_TEXT="$NOTES_AGENT_OUTPUT"
-          RELEASE_NOTES_ARGS=(--notes "$RELEASE_NOTES_TEXT")
-          return 0
-        fi
-        ;;
+      0) ;;
       2)
         RELEASE_NOTES_NO_AGENT=true
-        [ "${FLAG_DRYRUN:-false}" = true ] \
+        [ "$dry" = true ] \
           || log_info "No notes agent found (RELEASE_NOTES_AGENT=${S_VAL-}auto${RESET-}) — publishing the release notes this release has without a notes agent."
         ;;
       *)
@@ -385,6 +384,8 @@ resolve-release-notes() {
       RELEASE_NOTES_ARGS+=(--notes-start-tag "${TAG_PREFIX}${V_PREV}")
     fi
   fi
+  # A picked agent is what a dry run reports; the text and flags above stay
+  # the fallback notes for the [dry-run] line.
   [ "$picked" = true ] && RELEASE_NOTES_KIND="agent"
   return 0
 }
@@ -428,13 +429,13 @@ do-github-release() {
     fi
     # The generated flags print as-is; a notes body prints quoted. Under a
     # notes agent these are the fallback notes (resolve-release-notes).
-    local gh_preview="gh release create ${S_VAL}${tag}${RESET} ${pre_flag:+${pre_flag} }"
+    local gh_preview="gh release create ${S_VAL-}${tag}${RESET-} ${pre_flag:+${pre_flag} }"
     local notes_preview="${RELEASE_NOTES_ARGS[*]}"
     [ "${RELEASE_NOTES_ARGS[0]-}" = --notes ] && notes_preview="--notes '${RELEASE_NOTES_TEXT}'"
     if [ "$RELEASE_NOTES_KIND" = agent ]; then
-      echo -e "${S_LIGHT}[dry-run]${RESET} notes agent: ${S_VAL}${NOTES_AGENT_NAME}${RESET} (${NOTES_AGENT_AUTH:-custom command}) — would run: ${gh_preview}--notes '<notes from ${NOTES_AGENT_NAME}>'; fallback: ${gh_preview}${notes_preview}" >&2
+      echo -e "${S_LIGHT-}[dry-run]${RESET-} notes agent: ${S_VAL-}${NOTES_AGENT_NAME}${RESET-} (${NOTES_AGENT_AUTH:-custom command}) — would run: ${gh_preview}--notes '<notes from ${NOTES_AGENT_NAME}>'; fallback: ${gh_preview}${notes_preview}" >&2
     elif [ "$RELEASE_NOTES_NO_AGENT" = true ]; then
-      echo -e "${S_LIGHT}[dry-run]${RESET} no notes agent found (RELEASE_NOTES_AGENT=${S_VAL}${RELEASE_NOTES_AGENT}${RESET}) — would run: ${gh_preview}${notes_preview}" >&2
+      echo -e "${S_LIGHT-}[dry-run]${RESET-} no notes agent found (RELEASE_NOTES_AGENT=${S_VAL-}${RELEASE_NOTES_AGENT-}${RESET-}) — would run: ${gh_preview}${notes_preview}" >&2
     else
       echo -e "${S_LIGHT}[dry-run]${RESET} would run: ${gh_preview}${notes_preview}" >&2
     fi

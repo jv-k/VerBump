@@ -86,7 +86,7 @@ _NOTES_AGENT_TIMEOUT_S=""
 # watchdog, which leads the process group that holds the agent and the
 # timer, the run's temporary directories, and the caller's INT and TERM
 # traps (`trap -p` output) to put back afterwards. Empty when no agent runs.
-_NOTES_AGENT_PID=""
+_NOTES_WATCHDOG_PID=""
 _NOTES_AGENT_TMP=()
 _NOTES_CALLER_TRAPS=""
 # The run's scratch directory (prompt, output), outside the agent's own
@@ -119,14 +119,17 @@ _resolve-notes-agent-timeout() {
 # Stop whatever the watchdog still has running and remove its temporary
 # directories. Killing a process group is safe only while its leader is not
 # yet reaped (a reaped PID can be reused), so the caller clears
-# _NOTES_AGENT_PID once it has waited for the watchdog.
+# _NOTES_WATCHDOG_PID once it has waited for the watchdog. This KILL, sent
+# on an interrupt, is the one group signal sent from outside the group:
+# bash reaps a child as soon as it exits, so a watchdog that ended a moment
+# before the interrupt leaves a small window this does not close.
 _notes-agent-cleanup() {
-  if [ -n "$_NOTES_AGENT_PID" ]; then
-    kill -KILL -- "-${_NOTES_AGENT_PID}" 2>/dev/null
-    wait "$_NOTES_AGENT_PID" 2>/dev/null
+  if [ -n "$_NOTES_WATCHDOG_PID" ]; then
+    kill -KILL -- "-${_NOTES_WATCHDOG_PID}" 2>/dev/null
+    wait "$_NOTES_WATCHDOG_PID" 2>/dev/null
   fi
   [ "${#_NOTES_AGENT_TMP[@]}" -gt 0 ] && rm -rf "${_NOTES_AGENT_TMP[@]}"
-  _NOTES_AGENT_PID="" _NOTES_AGENT_TMP=() _NOTES_AGENT_SCRATCH=""
+  _NOTES_WATCHDOG_PID="" _NOTES_AGENT_TMP=() _NOTES_AGENT_SCRATCH=""
 }
 
 # Print the command of one `trap -p <signal>` line (empty for no trap). The
@@ -137,23 +140,32 @@ _notes-trap-command() {
   printf '%s' "${2-}"
 }
 
-# INT / TERM while the agent runs: the agent and the timer sit in their own
-# process group, so a Ctrl-C at the terminal never reaches them. Stop them,
-# remove the temporary files and put back the caller's traps. A caller trap
-# for this signal is then run here, directly: bash 3.2 does not run a trap
-# for a signal raised inside another trap's handler, so re-signalling would
-# skip it. If the caller's trap does not exit, die of the same signal so the
-# exit status says so (the exit is the fallback if the signal is ignored).
-_notes-agent-interrupt() {
-  local handler
+# End the watchdog's run: stop what it still has running, remove its
+# temporary files, and put back the caller's INT and TERM traps.
+_notes-agent-finish() {
   _notes-agent-cleanup
   trap - INT TERM
   eval "$_NOTES_CALLER_TRAPS"
-  handler=$(_notes-trap-command "$(trap -p "$1")")
+  _NOTES_CALLER_TRAPS=""
+}
+
+# INT / TERM while the agent runs: the agent and the timer sit in their own
+# process group, so a Ctrl-C at the terminal never reaches them. Finish the
+# run, then run the caller's trap for this signal here, directly: bash 3.2
+# does not run a trap for a signal raised inside another trap's handler, so
+# re-signalling would skip it. The caller's trap runs with no positional
+# parameters, inside this function. If it does not exit, die of the same
+# signal so the exit status says so (the exit is the fallback if the signal
+# is ignored).
+_notes-agent-interrupt() {
+  local sig=$1 code=$2 handler
+  _notes-agent-finish
+  handler=$(_notes-trap-command "$(trap -p "$sig")")
+  set --
   [ -n "$handler" ] && eval "$handler"
-  trap - "$1"
-  kill -s "$1" "$$"
-  exit "$2"
+  trap - "$sig"
+  kill -s "$sig" "$$"
+  exit "$code"
 }
 
 # ── Built-in notes agents (R-REL-16..19) ─────────────────────────────────────
@@ -347,23 +359,21 @@ run-notes-agent() {
   case $- in *m*) had_monitor=true ;; esac
   set -m
   _notes-agent-watchdog "$cmd" "$workdir" "$scratch" </dev/null >/dev/null 2>&1 &
-  _NOTES_AGENT_PID=$!
+  _NOTES_WATCHDOG_PID=$!
   [ "$had_monitor" = true ] || set +m
 
   # The watchdog ends only by a KILL to its whole group, so once it is
   # waited for, nothing the agent started in the group is left. stderr off:
   # bash reports a job killed by a signal ("Killed") here.
-  wait "$_NOTES_AGENT_PID" 2>/dev/null
-  _NOTES_AGENT_PID=""
+  wait "$_NOTES_WATCHDOG_PID" 2>/dev/null
+  _NOTES_WATCHDOG_PID=""
   # No rc file: the timer's KILL stopped an agent that ignored TERM.
   rc=$(cat "${scratch}/rc" 2>/dev/null) || rc=137
   NOTES_AGENT_OUTPUT=$(cat "${scratch}/out")
   if [ -f "${scratch}/timed-out" ]; then
     NOTES_AGENT_ERROR="timed out after ${_NOTES_AGENT_TIMEOUT_S}s (RELEASE_NOTES_AGENT_TIMEOUT)"
   fi
-  _notes-agent-cleanup
-  trap - INT TERM
-  eval "$_NOTES_CALLER_TRAPS"
+  _notes-agent-finish
 
   if [ -n "$NOTES_AGENT_ERROR" ]; then
     NOTES_AGENT_OUTPUT=""

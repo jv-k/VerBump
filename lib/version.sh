@@ -134,6 +134,13 @@ process-version() {
         ;;
       esac
     fi
+  elif [ "${FLAG_YES:-false}" = true ]; then
+    # --yes takes the suggestion without reading stdin (R-YES-1). Without
+    # this branch the prompt below still ran: a closed stdin happened to
+    # accept the suggestion, but a terminal waited for a key and piped input
+    # was read as the version.
+    V_NEW=$V_SUGGEST
+    echo -e "\nSuggested version accepted via [--yes]: ${S_VAL}${V_NEW}${RESET}"
   else
     # Display a suggested version
     prompt_input

@@ -181,12 +181,16 @@ hooks_repo() {
 
 @test "hooks: --no-hooks skips both hooks (R-HOOK-5)" {
   hooks_repo
+  local remote
+  remote=$(mktemp -d); CLEANUP_CMDS+=("rm -rf ${remote}")
+  git init -q --bare "$remote"
+  git remote add origin "$remote"
 
-  # </dev/null makes the EOF explicit: with inherited stdin an interactive
-  # bats run would hang at the push prompt instead of declining it.
+  # -y answers the push prompt (R-YES-1), so the run pushes to the bare
+  # remote and completes.
   PRE_BUMP_CMD="touch pre-ran; exit 1" POST_TAG_CMD="touch post-ran; exit 1" \
     run ${profile_script} -v 1.0.1 -y --no-hooks </dev/null
-  assert_failure 5 # falls through to the push prompt, declined by stdin EOF
+  assert_success
   [ ! -f pre-ran ]
   [ ! -f post-ran ]
   # The release itself went through: bump commit + tag exist.

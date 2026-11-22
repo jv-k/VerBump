@@ -118,11 +118,13 @@ synced_repo() {
   git push -q origin v1.0.1
   git tag -d v1.0.1 >/dev/null
 
-  # Live run: the collision only surfaces at the push, which stays
-  # best-effort (warn, not abort) — the documented pre-#58 behaviour.
+  # Live run: the collision only surfaces at the push, which now fails the
+  # run with exit 1 (R-FLOW-8) and keeps the local commit and tag.
   run ${profile_script} -c -p origin -v 1.0.1 --no-fetch
+  assert_failure 1
   strip_ansi_output
-  assert_output --partial "Push failed"
+  assert_output --partial "Push to <origin> failed"
+  assert_output --partial "git push -u origin main v1.0.1"
 }
 
 @test "remote-sync: NO_FETCH=true in .verbumprc skips the preflight" {

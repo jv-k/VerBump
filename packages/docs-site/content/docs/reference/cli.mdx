@@ -49,7 +49,7 @@ the stable core (`1.2.3-dev.5 --patch` → `1.2.4`) — the full rules live in
 
 | Flag | Description |
 | --- | --- |
-| `-p`, `--push <remote>` | Push the commit and tag (and release branch, with `--branch` / `--pr`) to `<remote>` at the end of the run. |
+| `-p`, `--push <remote>` | Push the commit and tag (and release branch, with `--branch` / `--pr`) to `<remote>` at the end of the run, with no prompt. Without `-p`, VerBump asks before it pushes. A failed push exits `1`. |
 | `--pr` | Branch, push, and open a release PR via `gh` (GitHub-only, and implies push to origin). |
 | `--base <branch>` | Base branch for `--pr` (GitHub-only, default: the branch you ran VerBump from). |
 | `--release` | Publish a GitHub release for the new tag (GitHub-only, requires `-p`, uses `gh`). |
@@ -71,8 +71,8 @@ the stable core (`1.2.3-dev.5 --patch` → `1.2.4`) — the full rules live in
 | Flag | Description |
 | --- | --- |
 | `--undo [<version>]` | Delete an unpushed release's tag, plus its `release-X.Y.Z` branch when one was cut; with tag-in-place the bump commit stays on your branch. Refuses if pushed or dirty. |
-| `-d`, `--dry-run` | Print every side-effect without executing. |
-| `-y`, `--yes` | Skip interactive confirmation prompts. |
+| `-d`, `--dry-run` | Print every side-effect without executing. Never asks to push: the push is planned only with `-p`, `--pr`, or `--yes`. |
+| `-y`, `--yes` | Answer every prompt: take the suggested version, push (to `origin`, or the `-p` / `PUSH_DEST` remote), and confirm `--undo`. |
 | `-q`, `--quiet` | Suppress decoration and print only the new version on stdout (needs `-y`, `-v`, a bump level, or `--preid`). |
 | `--json` | With `--dry-run`: print the release plan as one JSON object on stdout (needs `-y`, `-v`, a bump level, or `--preid`). Preview-only — real runs keep their normal output. |
 | `-h`, `--help` | Show the help message (paged through `less`/`more` when the terminal is short). |

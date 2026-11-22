@@ -100,7 +100,8 @@ All preflights run before anything is mutated and exit `3`.
 | `1` | Failed to create the release branch | Resolve the git error above, or drop `--branch`/`--pr` to tag in place instead. |
 | `1` | `git commit` failed | Resolve the git error above, or pass `-n/--no-commit` to skip committing. |
 | `1` | Failed to create the git tag | If a previous run left a partial release, check `git tag -l <tag>` and your release branch, then retry. |
-| `5` | Push declined at the confirmation prompt | Re-run and answer `y`, or pass `-p/--push <remote>` to skip the prompt. |
+| `1` | Push failed (rejected, no such remote, no credentials, detached `HEAD`) | The commit and tag are kept locally. Fix the cause, then run the `git push -u <remote> <branch> <tag>` the hint prints, or discard the release with `verbump --undo <version>`. With `--pr` / `--release`, the hint also prints the `gh` command that finishes the step. |
+| `5` | Push declined at the confirmation prompt | Re-run and answer `y`, or pass `-p/--push <remote>` or `--yes` to skip the prompt. |
 
 ## GitHub release & PR
 

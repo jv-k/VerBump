@@ -78,6 +78,7 @@ guide to installing, configuring, and releasing with VerBump:
 - [Workflows](https://verbump.jvk.to/docs/guides/workflows) — tag in place, release branch, or release PR
 - [Version suggestion](https://verbump.jvk.to/docs/guides/version-suggestion) — how commits pick the next SemVer
 - [Bump targets](https://verbump.jvk.to/docs/guides/bump-targets) — non-Node projects and extra files
+- [Running in CI](https://verbump.jvk.to/docs/guides/ci) — a release job with no prompts
 - [CLI options](https://verbump.jvk.to/docs/reference/cli) — every flag, grouped like `verbump --help`
 - [Configuration](https://verbump.jvk.to/docs/reference/configuration) — `.verbumprc`, every key
 - [Migrating](https://verbump.jvk.to/docs/guides/migrating) — from 1.x or the old `ver-bump`

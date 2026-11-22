@@ -24,6 +24,10 @@ verbump --dry-run
 Combine with `--no-commit` / `--no-changelog` to narrow the preview down to
 just the steps you want to see.
 
+A dry run never asks to push. It plans the push only when `-p <remote>`,
+`--pr`, or `--yes` chooses it; otherwise the preview leaves the push out and
+says so.
+
 ### JSON preview
 
 Add `--json` (with `-y`, `-v`, a bump level, or `--preid`) to print the

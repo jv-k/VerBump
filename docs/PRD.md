@@ -167,6 +167,7 @@ Each requirement has an ID so tests and PRs can reference it.
 | **R-DRY-2** | Every side-effect that would have occurred is printed to stderr with a `[dry-run]` prefix, in the order it would have been executed. |
 | **R-DRY-3** | Running `--dry-run` against this repo's own checkout must not modify the working tree (regression guard). |
 | **R-DRY-4** | Dry-run intercepts the push: with `-p <remote>` and `--dry-run`, no network call is made and the user is never prompted to push (resolves Q-2). |
+| **R-DRY-5** | Dry-run never asks to push. Without `-p`, `--pr`, or `--yes`, the plan leaves the push out and exits `0`, so a preview never blocks a script. |
 
 ### 5.6 Exit codes
 
@@ -237,7 +238,7 @@ Each requirement has an ID so tests and PRs can reference it.
 
 | ID | Requirement |
 | --- | --- |
-| **R-YES-1** | `-y` / `--yes` auto-accepts the suggested (or `-v`-supplied) version at the version prompt and the push confirmation — no `read` blocks the run (resolves Q-1: shipped in 2.0, not deferred). |
+| **R-YES-1** | `-y` / `--yes` auto-accepts the suggested (or `-v`-supplied) version at the version prompt and the push confirmation — no `read` blocks the run (resolves Q-1: shipped in 2.0, not deferred). Without `-p`, the push goes to `PUSH_DEST`. A failed push exits `1` (R-FLOW-8), so CI can trust exit `0`. |
 | **R-YES-2** | `--yes` is honoured by `--undo`'s confirmation as well, regardless of flag order. `FLAG_YES` is **not** a supported `.verbumprc` key (auto-confirmation must be an explicit per-invocation choice). |
 
 ### 5.12 Explicit bump switches
@@ -264,6 +265,7 @@ Each requirement has an ID so tests and PRs can reference it.
 | --- | --- |
 | **R-FLOW-1** | Default is **tag-in-place**: commit + annotated tag on the current branch; no branch is created. `--branch` (or `FLAG_BRANCH=true` in `.verbumprc`) cuts a `release-<version>` branch instead. `-b`/`--no-branch` is retained as a deprecated no-op. |
 | **R-FLOW-2** | `--pr` implies `--branch` and a push to `origin` (override with `-p`), then opens a pull request via `gh` (conditional dependency, preflighted like `--release`). The base branch resolves `--base <branch>` › `PR_BASE` (env/`.verbumprc`) › the invocation branch › the remote's default branch. |
+| **R-FLOW-8** | A failed push exits `1` and keeps the local commit and tag; `--pr` / `--release` do not run. The hint gives the command that finishes the push, or `--undo`. |
 
 ---
 

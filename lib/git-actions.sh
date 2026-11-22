@@ -134,10 +134,17 @@ do-tag() {
 do-push() {
   [ "$FLAG_NOCOMMIT" = true ] && return
 
-  local CONFIRM PUSH_MSG PUSH_RC REMOTE_REF
+  local CONFIRM PUSH_MSG PUSH_RC REMOTE_REF TAG_REF HINT
 
-  if [ "$FLAG_PUSH" = true ]; then
+  # -p / --pr choose the push; --yes answers the confirmation (R-YES-1).
+  if [ "$FLAG_PUSH" = true ] || [ "${FLAG_YES:-false}" = true ]; then
     CONFIRM="Y"
+  elif [ "$FLAG_DRYRUN" = true ]; then
+    # A dry run never asks to push (R-DRY-5): the question would block a
+    # script, and a declined push used to end the preview with exit 5. With
+    # nothing on the command line to answer it, the plan leaves the push out.
+    echo -e "${S_LIGHT}[dry-run]${RESET} push not planned: a real run would ask to push to <${S_VAL}${PUSH_DEST}${RESET}>. Pass -p <remote> or --yes to plan it." >&2
+    return
   else
     prompt_confirm
     printf 'Push branch + tags to <%b%s%b>? %b[N/y]%b ' \
@@ -161,22 +168,32 @@ do-push() {
         return
       fi
 
-      PUSH_MSG=$( git push -u "${PUSH_DEST}" "${REMOTE_REF}" "${TAG_PREFIX}${V_NEW}" 2>&1 ); PUSH_RC=$?
+      TAG_REF="${TAG_PREFIX}${V_NEW}"
+      PUSH_MSG=$( git push -u "${PUSH_DEST}" "${REMOTE_REF}" "${TAG_REF}" 2>&1 ); PUSH_RC=$?
       if [ "$PUSH_RC" -ne 0 ]; then
-        # Record the failure so do-github-release won't publish a release for a
-        # tag that never reached the remote (gh would otherwise auto-create the
-        # tag at the wrong commit). Push stays best-effort (non-fatal) here.
-        PUSH_OK=false
-        log_warn "Push failed"
+        # A failed push ends the run with exit 1 (R-FLOW-8). It used to be a
+        # warning with exit 0, so CI reported a release that never reached
+        # the remote. Exiting here also keeps --pr and --release from running
+        # against a branch or tag the remote doesn't have.
         log_trace "$PUSH_MSG"
-      else
-        log_success "$PUSH_MSG"
+        if [ "$REMOTE_REF" = HEAD ]; then
+          HINT="HEAD is detached, so there is no branch to push. The commit and tag ${TAG_REF} are kept locally: check out a branch, move the bump commit onto it, then push the branch and the tag."
+        else
+          HINT="The commit and tag ${TAG_REF} are kept locally. Fix the cause, then push them with: git push -u ${PUSH_DEST} ${REMOTE_REF} ${TAG_REF}. Or discard the release with: verbump --undo ${V_NEW}"
+        fi
+        # --pr / --release never ran: name the command that finishes each.
+        [ "${DO_PR:-false}" = true ] && \
+          HINT="${HINT} After the push, open the PR with: gh pr create --head ${REL_PREFIX}${V_NEW} --base ${PR_BASE}"
+        [ "${DO_RELEASE:-false}" = true ] && \
+          HINT="${HINT} After the push, publish the release with: gh release create ${TAG_REF}"
+        fail 1 "Push to <${PUSH_DEST}> failed (see git output above)." "$HINT"
       fi
+      log_success "$PUSH_MSG"
     ;;
     * )
       fail 5 \
         "push declined" \
-        "Re-run and answer 'y' when prompted, or pass -p/--push <remote> to skip the prompt."
+        "Re-run and answer 'y' when prompted, or pass -p/--push <remote> or --yes to skip the prompt."
     ;;
   esac
 }
@@ -348,14 +365,9 @@ do-github-release() {
   [ "${DO_RELEASE:-false}" = true ] || return 0
   # Tag was skipped, so there's nothing to publish a release against.
   [ "${FLAG_NOCOMMIT:-false}" = true ] && return 0
-  # The push must have actually reached the remote. If it failed, do-push set
-  # PUSH_OK=false; publishing now would make `gh release create` auto-create the
-  # tag at the remote default-branch HEAD — a release at the wrong commit.
-  if [ "${PUSH_OK:-true}" != true ]; then
-    log_warn "Skipping GitHub release — the push did not succeed, so the tag isn't on the remote."
-    log_trace "Fix the push, then run: gh release create ${TAG_PREFIX}${V_NEW}"
-    return 0
-  fi
+  # The tag is on the remote here: a failed push already ended the run in
+  # do-push (R-FLOW-8), so `gh release create` can't auto-create the tag at
+  # the remote default-branch HEAD — a release at the wrong commit.
 
   local tag pre_flag=""
   tag="${TAG_PREFIX}${V_NEW}"
@@ -414,12 +426,8 @@ do-pr() {
   [ "${DO_PR:-false}" = true ] || return 0
   # No commit → no release branch content to propose.
   [ "${FLAG_NOCOMMIT:-false}" = true ] && return 0
-  # The push must have reached the remote; otherwise the head branch isn't there.
-  if [ "${PUSH_OK:-true}" != true ]; then
-    log_warn "Skipping release PR — the push did not succeed, so the branch isn't on the remote."
-    log_trace "Fix the push, then run: gh pr create --head ${REL_PREFIX}${V_NEW} --base ${PR_BASE}"
-    return 0
-  fi
+  # The head branch is on the remote here: a failed push already ended the
+  # run in do-push (R-FLOW-8).
 
   local head title body RANGE
   head="${REL_PREFIX}${V_NEW}"

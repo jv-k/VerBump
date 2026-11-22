@@ -132,9 +132,11 @@ agent_monorepo() {
 # the caller sets it). The stub's AGENT_OUT / AGENT_RC, RELEASE_NOTES_PROMPT
 # and NOTES_CMD (the VERBUMP_RELEASE_NOTES_CMD to use, empty by default so the
 # host's own setting can't leak in) come from the caller's VAR=… prefix.
+# With RUN_SEPARATE set, stdout and stderr land in $output and $stderr (the
+# calling file must require bats 1.5).
 run_with_agent() {
   PATH="${SHIM}:$PATH" GH_ARGV_DIR="${SHIM}/argv" AGENT_REC="$AGENT_REC" \
     VERBUMP_RELEASE_NOTES_CMD="${NOTES_CMD-}" \
     RELEASE_NOTES_AGENT="${RELEASE_NOTES_AGENT-notes-agent-stub}" \
-    run ${profile_script} "$@" </dev/null
+    run ${RUN_SEPARATE:+--separate-stderr} ${profile_script} "$@" </dev/null
 }

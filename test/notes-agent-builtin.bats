@@ -14,6 +14,9 @@
 load 'test_helper'
 load 'release_notes_helper'
 
+# run --separate-stderr (the --json tests) needs bats 1.5.
+bats_require_minimum_version 1.5.0
+
 # An account email and org name the stubs print with their status, so a test
 # can show that VerBump never repeats them.
 STUB_EMAIL="stub-account@example.com"
@@ -113,18 +116,20 @@ builtin_agent_repo() {
 # sets one, and STUB_AUTH / STUB_AUTH_CLAUDE / STUB_AUTH_CODEX / AGENT_OUT /
 # AGENT_RC from the caller's prefix (an unset per-agent auth stays unset, so
 # the stub falls back to STUB_AUTH). VB_PATH replaces PATH when set (the
-# not-installed case).
+# not-installed case). RUN_FLAGS (an array) adds VerBump flags, such as -d;
+# with RUN_SEPARATE set, stdout and stderr land in $output and $stderr.
 run_builtin() {
   local agent=$1
   shift
-  run env -u ANTHROPIC_API_KEY -u OPENAI_API_KEY \
+  run ${RUN_SEPARATE:+--separate-stderr} env -u ANTHROPIC_API_KEY -u OPENAI_API_KEY \
     PATH="${VB_PATH:-${SHIM}:$PATH}" GH_ARGV_DIR="${SHIM}/argv" AGENT_REC="$AGENT_REC" \
     STUB_AUTH="${STUB_AUTH-}" ${STUB_AUTH_CLAUDE+STUB_AUTH_CLAUDE="$STUB_AUTH_CLAUDE"} \
     ${STUB_AUTH_CODEX+STUB_AUTH_CODEX="$STUB_AUTH_CODEX"} \
     AGENT_OUT="${AGENT_OUT-}" AGENT_RC="${AGENT_RC:-0}" \
     STUB_EMAIL="$STUB_EMAIL" STUB_ORG="$STUB_ORG" \
     VERBUMP_RELEASE_NOTES_CMD='' RELEASE_NOTES_AGENT="$agent" "$@" \
-    "${profile_script}" --release -p "$REMOTE" -b -c -v 1.3.0 </dev/null
+    "${profile_script}" --release -p "$REMOTE" -b -c -v 1.3.0 \
+    ${RUN_FLAGS[@]+"${RUN_FLAGS[@]}"} </dev/null
 }
 
 # Fail unless the stub's run (not its status check) got the flag <flag>,
@@ -471,5 +476,178 @@ path_without_agents() {
       assert_output 0
     fi
     assert_gh_argv "${SHIM}/argv" release create v1.3.0 --generate-notes --notes-start-tag v1.2.3
+  done
+}
+
+# ── Dry-run preview of the notes agent (#166, ADR-24, R-REL-20) ──────────────
+
+# Fail when the stubs show that a notes agent got a prompt: a built-in stub
+# writes $AGENT_REC/ran, the custom stub $AGENT_REC/stdin. A status check
+# writes neither.
+assert_no_agent_prompt() {
+  [ ! -e "${AGENT_REC}/ran" ] || bats_fail "a built-in notes agent ran: $(cat "${AGENT_REC}/ran")"
+  [ ! -e "${AGENT_REC}/stdin" ] || bats_fail "a notes agent got a prompt"
+}
+
+@test "dry-run agent: --dry-run never prompts auto, claude, codex or a custom command (#166)" {
+  local agent
+  local -a RUN_FLAGS=(-d)
+  for agent in auto claude codex notes-agent-stub; do
+    builtin_agent_repo
+    agent_stub "$SHIM"
+    STUB_AUTH=subscription AGENT_OUT="NOTES" run_builtin "$agent"
+    assert_success
+    assert_no_agent_prompt
+    [ ! -e "${SHIM}/argv/1" ] || bats_fail "gh ran under --dry-run with ${agent}"
+  done
+}
+
+@test "dry-run agent: the [dry-run] line names the picked agent, its auth mode and the fallback (#166)" {
+  local -a RUN_FLAGS=(-d)
+  local fallback="gh release create v1.3.0 --generate-notes --notes-start-tag v1.2.3"
+
+  builtin_agent_repo
+  STUB_AUTH=subscription run_builtin claude ANTHROPIC_API_KEY=sk-caller
+  assert_success
+  strip_ansi_output
+  assert_output --partial "[dry-run] notes agent: claude (subscription) — would run: gh release create v1.3.0 --notes '<notes from claude>'; fallback: ${fallback}"
+  # The live info line is for a run that calls the agent.
+  refute_output --partial "Notes agent: claude"
+  # The status check may run, and runs as it does live: without the key.
+  run cat "${AGENT_REC}/status"
+  assert_output "ANTHROPIC_API_KEY="
+
+  builtin_agent_repo
+  STUB_AUTH_CLAUDE=out STUB_AUTH_CODEX=key run_builtin auto OPENAI_API_KEY=sk-ci
+  assert_success
+  strip_ansi_output
+  assert_output --partial "[dry-run] notes agent: codex (API key) — would run: gh release create v1.3.0 --notes '<notes from codex>'; fallback: ${fallback}"
+
+  builtin_agent_repo
+  run_builtin "my-llm --fast"
+  assert_success
+  strip_ansi_output
+  assert_output --partial "[dry-run] notes agent: my-llm --fast (custom command) — would run: gh release create v1.3.0 --notes '<notes from my-llm --fast>'; fallback: ${fallback}"
+  assert_no_agent_prompt
+}
+
+@test "dry-run agent: with no notes agent found the [dry-run] line says so and shows the fallback (#166)" {
+  local -a RUN_FLAGS=(-d)
+  local fallback="gh release create v1.3.0 --generate-notes --notes-start-tag v1.2.3"
+
+  # auto: the [dry-run] line takes the place of the live info line.
+  builtin_agent_repo
+  STUB_AUTH=out run_builtin auto
+  assert_success
+  strip_ansi_output
+  assert_output --partial "[dry-run] no notes agent found (RELEASE_NOTES_AGENT=auto) — would run: ${fallback}"
+  refute_output --partial "No notes agent found (RELEASE_NOTES_AGENT=auto) — publishing"
+  # No line in the run is a warning ("!" after the gutter).
+  run grep -E '^[[:space:]]*! ' <<< "$output"
+  assert_failure 1
+  assert_no_agent_prompt
+
+  # A named agent that is not available warns as a live run does.
+  builtin_agent_repo
+  rm "${SHIM}/claude" "${SHIM}/codex"
+  VB_PATH=$(path_without_agents) run_builtin claude
+  assert_success
+  strip_ansi_output
+  assert_output --partial "Notes agent 'claude' is not installed (no 'claude' on PATH)"
+  assert_output --partial "[dry-run] no notes agent found (RELEASE_NOTES_AGENT=claude) — would run: ${fallback}"
+}
+
+# The github-release effect of the --dry-run --json plan in $output, as
+# compact JSON.
+github_release_effect() {
+  jq -c '.effects[] | select(.action == "github-release")' <<< "$output"
+}
+
+@test "dry-run agent: the --json effect names the agent and the fallback when an agent would run (#166)" {
+  local -a RUN_FLAGS=(-d --json)
+  local RUN_SEPARATE=1
+
+  builtin_agent_repo
+  STUB_AUTH=subscription run_builtin claude
+  assert_success
+  run github_release_effect
+  assert_output '{"action":"github-release","tag":"v1.3.0","notes":"agent","prerelease":false,"agent":"claude","fallback":"generated"}'
+
+  builtin_agent_repo
+  STUB_AUTH_CLAUDE=out STUB_AUTH_CODEX=subscription run_builtin auto
+  assert_success
+  run github_release_effect
+  assert_output '{"action":"github-release","tag":"v1.3.0","notes":"agent","prerelease":false,"agent":"codex","fallback":"generated"}'
+
+  builtin_agent_repo
+  run_builtin "my-llm --fast"
+  assert_success
+  run github_release_effect
+  assert_output '{"action":"github-release","tag":"v1.3.0","notes":"agent","prerelease":false,"agent":"my-llm --fast","fallback":"generated"}'
+}
+
+@test "dry-run agent: the --json effect has agent null and today's notes when the feature is off or no agent is found (#166)" {
+  local -a RUN_FLAGS=(-d --json)
+  local RUN_SEPARATE=1 agent
+  local want='{"action":"github-release","tag":"v1.3.0","notes":"generated","prerelease":false,"agent":null,"fallback":"generated"}'
+
+  for agent in off auto claude; do
+    builtin_agent_repo
+    STUB_AUTH=out run_builtin "$agent"
+    assert_success
+    run github_release_effect
+    assert_output "$want"
+  done
+
+  # A custom VERBUMP_RELEASE_NOTES_CMD still runs and beats the agent.
+  builtin_agent_repo
+  STUB_AUTH=subscription run_builtin claude VERBUMP_RELEASE_NOTES_CMD='echo CMD-NOTES'
+  assert_success
+  run github_release_effect
+  assert_output '{"action":"github-release","tag":"v1.3.0","notes":"command","prerelease":false,"agent":null,"fallback":"generated"}'
+  assert_no_agent_prompt
+}
+
+@test "dry-run agent: under a package scope the fallback is the package's changelog entry (#166)" {
+  agent_monorepo
+  local RUN_SEPARATE=1 err
+
+  run_with_agent --release -d --json -p "$REMOTE" -b -c -v 1.2.4
+  assert_success
+  assert_no_agent_prompt
+  # Keep the run's stderr: the next `run` replaces it.
+  err=$stderr
+  run jq -r '.effects[] | select(.action == "github-release") | "\(.notes) \(.agent) \(.fallback)"' <<< "$output"
+  assert_output "agent notes-agent-stub changelog"
+  # The fallback prints the package's changelog entry as its notes.
+  run grep -c -F "[dry-run] notes agent: notes-agent-stub (custom command) — would run: gh release create pkg-a-v1.2.4 --notes '<notes from notes-agent-stub>'; fallback: gh release create pkg-a-v1.2.4 --notes '" <<< "$err"
+  assert_output 1
+  run grep -c -F "correct rounding" <<< "$err"
+  refute_output 0
+}
+
+@test "dry-run agent: with RELEASE_NOTES_AGENT=off the dry-run release lines are today's (#166)" {
+  local -a RUN_FLAGS=(-d)
+  local agent
+
+  for agent in off auto; do
+    builtin_agent_repo
+    # auto with a custom VERBUMP_RELEASE_NOTES_CMD: the command wins, as today.
+    if [ "$agent" = auto ]; then
+      STUB_AUTH=subscription run_builtin auto VERBUMP_RELEASE_NOTES_CMD='echo CMD-NOTES'
+    else
+      STUB_AUTH=subscription run_builtin off
+    fi
+    assert_success
+    strip_ansi_output
+    if [ "$agent" = auto ]; then
+      assert_line "[dry-run] would run: gh release create v1.3.0 --notes 'CMD-NOTES'"
+    else
+      assert_line "[dry-run] would run: gh release create v1.3.0 --generate-notes --notes-start-tag v1.2.3"
+    fi
+    refute_output --partial "notes agent"
+    refute_output --partial "Notes agent"
+    # off never asks for a login status.
+    [ "$agent" = auto ] || [ ! -e "${AGENT_REC}/status" ] || bats_fail "off ran a status check"
   done
 }

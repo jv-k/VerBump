@@ -289,13 +289,16 @@ check-pr-deps() {
 # Resolve the notes the --release step publishes — the one place that picks
 # the notes source (R-MONO-9, ADR-24). Sets, for the caller to consume:
 #   RELEASE_NOTES_KIND       "command" | "agent" | "changelog" | "generated"
-#                            (the --json `notes` value; never "agent" there,
-#                            because dry-run never runs the agent)
+#                            (the --json `notes` value)
 #   RELEASE_NOTES_TEXT       the notes body; empty when gh generates it
 #   RELEASE_NOTES_ARGS       the matching `gh release create` notes flags
+#   RELEASE_NOTES_FALLBACK   "changelog" | "generated": the kind of notes the
+#                            release publishes without a notes agent
+#   RELEASE_NOTES_NO_AGENT   true when the run asks for a notes agent and none
+#                            is available, else false
 # Sources, in precedence order: a custom $VERBUMP_RELEASE_NOTES_CMD beats
-# everything; then the notes agent named by RELEASE_NOTES_AGENT (live runs
-# only, R-REL-10); under a package scope the package's own changelog entry via
+# everything; then the notes agent named by RELEASE_NOTES_AGENT (R-REL-10);
+# under a package scope the package's own changelog entry via
 # render-release-notes (gh's generator can't path-scope — it would list
 # foreign packages' PRs); otherwise gh --generate-notes, anchored to this tag
 # series' previous tag so GitHub can't auto-pick a baseline from another
@@ -304,34 +307,49 @@ check-pr-deps() {
 # notes a release publishes without a notes agent (ADR-24). A notes agent that
 # fails prints one warning naming the cause and falls through to those notes
 # (R-REL-13); RELEASE_NOTES_AGENT=auto that finds no agent prints one info
-# line instead and falls through the same way (R-REL-19). A custom command
-# runs in dry-run too, so the preview reflects real output (R-REL-5). If it
-# exits non-zero, fail 1 with its stderr; the tag push already happened and
-# is intentionally NOT rolled back (R-REL-6). Call it directly, never in
-# $(...): the results are globals and `fail` must exit.
+# line instead and falls through the same way (R-REL-19). Dry-run picks the
+# notes agent but never calls it, so a preview spends no tokens (R-REL-20):
+# when one is picked, the kind is "agent" and the text and flags are the
+# fallback notes; when none is available, the dry-run line says so in place
+# of the info line. A custom command runs in dry-run too, so the preview
+# reflects real output (R-REL-5). If it exits non-zero, fail 1 with its
+# stderr; the tag push already happened and is intentionally NOT rolled back
+# (R-REL-6). Call it directly, never in $(...): the results are globals and
+# `fail` must exit.
 resolve-release-notes() {
   local notes_cmd="${VERBUMP_RELEASE_NOTES_CMD:-}"
-  local agent="${RELEASE_NOTES_AGENT:-off}"
+  local agent="${RELEASE_NOTES_AGENT:-off}" picked=false
   [ "${1-}" = --fallback ] && notes_cmd="" agent=off
-  # Dry-run never calls the agent (ADR-24): a preview spends no tokens.
-  [ "${FLAG_DRYRUN:-false}" = true ] && agent=off
-  RELEASE_NOTES_KIND="" RELEASE_NOTES_TEXT=""
+  RELEASE_NOTES_KIND="" RELEASE_NOTES_TEXT="" RELEASE_NOTES_NO_AGENT=false
   RELEASE_NOTES_ARGS=()
+  RELEASE_NOTES_FALLBACK="generated"
+  [ "${VB_SCOPE_ACTIVE:-false}" = true ] && RELEASE_NOTES_FALLBACK="changelog"
 
   if [ -z "$notes_cmd" ] && [ "$agent" != off ]; then
     local agent_rc=0
-    run-notes-agent "$agent" || agent_rc=$?
+    if [ "${FLAG_DRYRUN:-false}" = true ]; then
+      pick-notes-agent "$agent" || agent_rc=$?
+    else
+      run-notes-agent "$agent" || agent_rc=$?
+    fi
     case $agent_rc in
       0)
-        RELEASE_NOTES_KIND="agent"
-        RELEASE_NOTES_TEXT="$NOTES_AGENT_OUTPUT"
-        RELEASE_NOTES_ARGS=(--notes "$RELEASE_NOTES_TEXT")
-        return 0
+        if [ "${FLAG_DRYRUN:-false}" = true ]; then
+          picked=true
+        else
+          RELEASE_NOTES_KIND="agent"
+          RELEASE_NOTES_TEXT="$NOTES_AGENT_OUTPUT"
+          RELEASE_NOTES_ARGS=(--notes "$RELEASE_NOTES_TEXT")
+          return 0
+        fi
         ;;
       2)
-        log_info "No notes agent found (RELEASE_NOTES_AGENT=${S_VAL-}auto${RESET-}) — publishing the release notes this release has without a notes agent."
+        RELEASE_NOTES_NO_AGENT=true
+        [ "${FLAG_DRYRUN:-false}" = true ] \
+          || log_info "No notes agent found (RELEASE_NOTES_AGENT=${S_VAL-}auto${RESET-}) — publishing the release notes this release has without a notes agent."
         ;;
       *)
+        RELEASE_NOTES_NO_AGENT=true
         log_warn "Notes agent '${S_VAL-}${NOTES_AGENT_NAME}${RESET-}' ${NOTES_AGENT_ERROR} — publishing the release notes this release has without a notes agent."
         ;;
     esac
@@ -355,7 +373,7 @@ resolve-release-notes() {
     rm -f "$notes_err"
     RELEASE_NOTES_KIND="command"
     RELEASE_NOTES_ARGS=(--notes "$RELEASE_NOTES_TEXT")
-  elif [ "${VB_SCOPE_ACTIVE:-false}" = true ]; then
+  elif [ "$RELEASE_NOTES_FALLBACK" = changelog ]; then
     RELEASE_NOTES_TEXT=$(render-release-notes)
     RELEASE_NOTES_KIND="changelog"
     RELEASE_NOTES_ARGS=(--notes "$RELEASE_NOTES_TEXT")
@@ -367,6 +385,8 @@ resolve-release-notes() {
       RELEASE_NOTES_ARGS+=(--notes-start-tag "${TAG_PREFIX}${V_PREV}")
     fi
   fi
+  [ "$picked" = true ] && RELEASE_NOTES_KIND="agent"
+  return 0
 }
 
 # Publish a GitHub release for the just-pushed tag, with the notes
@@ -392,19 +412,32 @@ do-github-release() {
   resolve-release-notes
 
   if [ "${FLAG_DRYRUN:-false}" = true ]; then
-    # notes: RELEASE_NOTES_KIND (see resolve-release-notes); prerelease is a
-    # real boolean.
+    # notes, fallback: see resolve-release-notes; agent: the notes agent a
+    # live run would call, else null; prerelease is a real boolean.
     if [ "${FLAG_JSON:-false}" = true ]; then
+      local agent_name=""
+      [ "$RELEASE_NOTES_KIND" = agent ] && agent_name=$NOTES_AGENT_NAME
       record-effect-raw "$(jq -nc \
         --arg tag "$tag" \
         --arg notes "$RELEASE_NOTES_KIND" \
         --argjson prerelease "$([ -n "$pre_flag" ] && echo true || echo false)" \
-        '{action:"github-release", tag:$tag, notes:$notes, prerelease:$prerelease}')"
+        --arg agent "$agent_name" \
+        --arg fallback "$RELEASE_NOTES_FALLBACK" \
+        '{action:"github-release", tag:$tag, notes:$notes, prerelease:$prerelease,
+          agent:(if $agent == "" then null else $agent end), fallback:$fallback}')"
     fi
-    # The generated flags print as-is; a notes body prints quoted.
+    # The generated flags print as-is; a notes body prints quoted. Under a
+    # notes agent these are the fallback notes (resolve-release-notes).
+    local gh_preview="gh release create ${S_VAL}${tag}${RESET} ${pre_flag:+${pre_flag} }"
     local notes_preview="${RELEASE_NOTES_ARGS[*]}"
-    [ "$RELEASE_NOTES_KIND" != "generated" ] && notes_preview="--notes '${RELEASE_NOTES_TEXT}'"
-    echo -e "${S_LIGHT}[dry-run]${RESET} would run: gh release create ${S_VAL}${tag}${RESET} ${pre_flag:+${pre_flag} }${notes_preview}" >&2
+    [ "${RELEASE_NOTES_ARGS[0]-}" = --notes ] && notes_preview="--notes '${RELEASE_NOTES_TEXT}'"
+    if [ "$RELEASE_NOTES_KIND" = agent ]; then
+      echo -e "${S_LIGHT}[dry-run]${RESET} notes agent: ${S_VAL}${NOTES_AGENT_NAME}${RESET} (${NOTES_AGENT_AUTH:-custom command}) — would run: ${gh_preview}--notes '<notes from ${NOTES_AGENT_NAME}>'; fallback: ${gh_preview}${notes_preview}" >&2
+    elif [ "$RELEASE_NOTES_NO_AGENT" = true ]; then
+      echo -e "${S_LIGHT}[dry-run]${RESET} no notes agent found (RELEASE_NOTES_AGENT=${S_VAL}${RELEASE_NOTES_AGENT}${RESET}) — would run: ${gh_preview}${notes_preview}" >&2
+    else
+      echo -e "${S_LIGHT}[dry-run]${RESET} would run: ${gh_preview}${notes_preview}" >&2
+    fi
     log_success "(dry-run) GitHub release prepared for ${S_VAL}${tag}${RESET}"
     return
   fi

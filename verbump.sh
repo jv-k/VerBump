@@ -64,10 +64,13 @@ FLAG_JSON=false # --json: with --dry-run, emit the release plan as one JSON obje
 # RELEASE_NOTES_KIND / RELEASE_NOTES_TEXT / RELEASE_NOTES_ARGS (set by
 # resolve-release-notes in lib/git-actions.sh): the notes the --release step
 # publishes, or with --fallback the notes it publishes without a notes agent
-# (ADR-24).
-# NOTES_AGENT_OUTPUT / NOTES_AGENT_ERROR / NOTES_AGENT_NAME (set by
-# run-notes-agent in lib/notes-agent.sh): the notes agent's notes, or why it
-# produced none, and the agent that ran (the one auto picked, R-REL-19).
+# (ADR-24). RELEASE_NOTES_FALLBACK / RELEASE_NOTES_NO_AGENT (same setter): the
+# kind of those fallback notes, and whether an asked-for agent was not found —
+# both read by the dry-run preview (R-REL-20).
+# NOTES_AGENT_OUTPUT / NOTES_AGENT_ERROR (set by run-notes-agent in
+# lib/notes-agent.sh): the notes agent's notes, or why it produced none.
+# NOTES_AGENT_NAME / NOTES_AGENT_AUTH (set by pick-notes-agent, same file): the
+# agent picked (the one auto picked, R-REL-19) and its auth mode.
 
 # Config-keyed defaults use `:=` so exported env values survive. An
 # unconditional assignment (e.g. `TAG_PREFIX="v"`) would clobber

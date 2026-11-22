@@ -95,6 +95,9 @@ _NOTES_AGENT_SCRATCH=""
 # line names and the command that runs the agent.
 _NOTES_AGENT_AUTH=""
 _NOTES_AGENT_CMD=""
+# Set by run-notes-agent: the agent that ran or was tried, for the lines that
+# name it — the built-in agent auto picked, else RELEASE_NOTES_AGENT as given.
+NOTES_AGENT_NAME=""
 
 # Set _NOTES_AGENT_TIMEOUT_S to RELEASE_NOTES_AGENT_TIMEOUT when it is a
 # positive integer; otherwise warn and use the default. Leading zeros are
@@ -141,11 +144,12 @@ _notes-agent-interrupt() {
   exit "$2"
 }
 
-# ── Built-in notes agents (R-REL-16..18) ─────────────────────────────────────
+# ── Built-in notes agents (R-REL-16..19) ─────────────────────────────────────
 # RELEASE_NOTES_AGENT=claude or =codex names a built-in agent: VerBump knows
 # its flags, how to read its final message, and how to tell whether it bills
-# a subscription or an API key. Any other value is a custom command, run
-# as-is with the caller's environment.
+# a subscription or an API key. auto picks the first available one, claude
+# then codex. Any other value is a custom command, run as-is with the
+# caller's environment.
 
 # The provider API key a built-in agent's CLI bills when it is set.
 _notes-builtin-key-var() {
@@ -193,6 +197,25 @@ _resolve-notes-builtin() {
   fi
 }
 
+# RELEASE_NOTES_AGENT=auto (R-REL-19): pick the first available built-in
+# agent, claude then codex, by the rules of _resolve-notes-builtin. Sets
+# NOTES_AGENT_NAME to it, with _NOTES_AGENT_AUTH / _NOTES_AGENT_CMD as
+# _resolve-notes-builtin left them; or returns 1 when neither is available.
+# An unavailable agent is not an error here, so its NOTES_AGENT_ERROR is
+# cleared. Only the pick moves on to codex: once an agent is picked, a
+# failed run falls back to the notes without an agent, never to codex.
+_resolve-notes-auto() {
+  local agent
+  for agent in claude codex; do
+    if _resolve-notes-builtin "$agent"; then
+      NOTES_AGENT_NAME=$agent
+      return 0
+    fi
+    NOTES_AGENT_ERROR=""
+  done
+  return 1
+}
+
 # Run claude on the prompt (stdin): print mode, no built-in tools, no MCP
 # servers (--strict-mcp-config with no --mcp-config), no saved session.
 # Its stdout carries one JSON object per line next to anything else it
@@ -221,7 +244,8 @@ _notes-agent-codex() {
 
 # Run the notes agent <cmd> on the built prompt. A built-in name (claude,
 # codex) runs that CLI as _resolve-notes-builtin decides, after an info line
-# that names the agent and the auth mode. Any other value is eval'd, like
+# that names the agent and the auth mode; auto first picks one of them
+# (_resolve-notes-auto). Any other value is eval'd, like
 # VERBUMP_RELEASE_NOTES_CMD, so a value such as 'gemini -p' or
 # 'llm -m mymodel' splits into its arguments. It reads the prompt on stdin and
 # runs in a fresh empty temporary directory, so it has no repo to read or
@@ -229,7 +253,9 @@ _notes-agent-codex() {
 # output. On success, sets NOTES_AGENT_OUTPUT and returns 0. When a built-in
 # agent cannot run, or on a non-zero exit, a timeout, or empty or
 # whitespace-only output, sets NOTES_AGENT_ERROR to the cause and returns 1;
-# the caller warns and falls back.
+# the caller warns and falls back. When auto finds no agent, returns 2 with
+# no error: that is not a failure, so the caller prints an info line, not a
+# warning, and falls back (R-REL-19). NOTES_AGENT_NAME names the agent.
 #
 # Watchdog (R-REL-15): macOS has no coreutils `timeout`, so the agent runs in
 # the background and a background timer stops it after
@@ -244,13 +270,23 @@ _notes-agent-codex() {
 # shellcheck disable=SC2034
 run-notes-agent() {
   local cmd=$1 scratch workdir rc had_monitor=false saved_traps
-  NOTES_AGENT_OUTPUT="" NOTES_AGENT_ERROR=""
+  NOTES_AGENT_OUTPUT="" NOTES_AGENT_ERROR="" NOTES_AGENT_NAME=$cmd
+
+  # auto picks before the timeout is read: when it finds no agent, nothing
+  # runs, so the run prints only the caller's info line.
+  if [ "$cmd" = auto ]; then
+    _resolve-notes-auto || return 2
+  fi
   _resolve-notes-agent-timeout
 
   case $cmd in
     claude|codex)
       _resolve-notes-builtin "$cmd" || return 1
-      log_info "Notes agent: ${S_VAL-}${cmd}${RESET-} (${_NOTES_AGENT_AUTH})"
+      ;;
+  esac
+  case $NOTES_AGENT_NAME in
+    claude|codex)
+      log_info "Notes agent: ${S_VAL-}${NOTES_AGENT_NAME}${RESET-} (${_NOTES_AGENT_AUTH})"
       cmd=$_NOTES_AGENT_CMD
       ;;
   esac

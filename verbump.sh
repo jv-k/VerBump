@@ -65,8 +65,9 @@ FLAG_JSON=false # --json: with --dry-run, emit the release plan as one JSON obje
 # resolve-release-notes in lib/git-actions.sh): the notes the --release step
 # publishes, or with --fallback the notes it publishes without a notes agent
 # (ADR-24).
-# NOTES_AGENT_OUTPUT / NOTES_AGENT_ERROR (set by run-notes-agent in
-# lib/notes-agent.sh): the notes agent's notes, or why it produced none.
+# NOTES_AGENT_OUTPUT / NOTES_AGENT_ERROR / NOTES_AGENT_NAME (set by
+# run-notes-agent in lib/notes-agent.sh): the notes agent's notes, or why it
+# produced none, and the agent that ran (the one auto picked, R-REL-19).
 
 # Config-keyed defaults use `:=` so exported env values survive. An
 # unconditional assignment (e.g. `TAG_PREFIX="v"`) would clobber
@@ -80,7 +81,7 @@ FLAG_JSON=false # --json: with --dry-run, emit the release plan as one JSON obje
 : "${PUSH_DEST:=origin}"
 : "${CHANGELOG_STYLE:=flat}" # CHANGELOG.md style: flat (1.x-identical, default) | grouped
 : "${SOURCE_FILE:=package.json}" # Version source + primary bump target (R-SRC-1/5)
-: "${RELEASE_NOTES_AGENT:=off}" # Notes agent for --release notes: off | claude | codex | <command> (ADR-24)
+: "${RELEASE_NOTES_AGENT:=off}" # Notes agent for --release notes: off | auto | claude | codex | <command> (ADR-24)
 : "${RELEASE_NOTES_AGENT_TIMEOUT:=$NOTES_AGENT_TIMEOUT_DEFAULT}" # Seconds before a hung notes agent is stopped (R-REL-15)
 
 # Internal alias for the resolved version source. Everything downstream reads

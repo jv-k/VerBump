@@ -1,3 +1,39 @@
+## 4.5.0 (2026-11-22)
+- chore: updated package.json, updated CHANGELOG.md, bumped 4.4.0 -> 4.5.0
+- docs(docs): name every notes-agent key and the guide in --help
+- test(tests): check auto with no agent ignores a bad notes timeout (#182)
+- test(tests): share the no-agent auto checks between two tests
+- test(tests): check auto with no agent ignores a bad notes timeout
+- feat(git-actions): preview the notes agent in --dry-run and --json (#179)
+- docs(docs): document the notes agent for --release notes (#181)
+- docs(docs): name the package notes and fix notes-agent wording
+- docs(docs): document the notes agent for --release notes
+- refactor(git-actions): tidy the notes-agent dry-run preview after review
+- feat(git-actions): preview the notes agent in --dry-run and --json
+- fix(git-actions): kill TERM-proof agent children and run caller traps (#178)
+- refactor(git-actions): tidy the notes-agent watchdog after review
+- fix(git-actions): kill TERM-proof agent children and run caller traps
+- feat(git-actions): let RELEASE_NOTES_AGENT=auto pick the notes agent (#176)
+- test(tests): check the auto no-warning case against the release output
+- refactor(git-actions): resolve the notes agent in one switch
+- feat(git-actions): let RELEASE_NOTES_AGENT=auto pick the notes agent
+- feat(git-actions): stop a hung notes agent after a timeout (#171)
+- fix(git-actions): make non-interactive runs safe for CI (#175)
+- docs(docs): add a guide for release jobs in CI
+- fix(git-actions): honour --yes at both prompts and fail on a bad push
+- feat(git-actions): add built-in claude and codex notes agents (#174)
+- fix(git-actions): keep MCP servers off for built-in notes agents
+- feat(git-actions): add built-in claude and codex notes agents
+- test(tests): cover Ctrl-C during a hung notes agent
+- feat(git-actions): stop a hung notes agent after a timeout
+- refactor(git-actions): pick --release notes through one resolver (#169)
+- feat(git-actions): let a custom notes agent write --release notes (#170)
+- refactor(git-actions): share the notes range and keep diffstat totals
+- feat(git-actions): let a custom notes agent write --release notes
+- test(tests): register the release-notes gh shim cleanup at each call site
+- refactor(git-actions): print the generated-notes preview from its flags
+- refactor(git-actions): pick --release notes through one resolver
+
 ## 4.4.0 (2026-11-04)
 - chore: updated package.json, updated CHANGELOG.md, bumped 4.3.0 -> 4.4.0
 - feat(publish): make --update drive brew and node package managers (#154)

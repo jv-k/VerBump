@@ -440,6 +440,35 @@ path_without_agents() {
   done
 }
 
+@test "auto agent: with neither agent available, an invalid RELEASE_NOTES_AGENT_TIMEOUT does not warn (#180)" {
+  local setup
+
+  # No agent runs, so the timeout is never read (R-REL-19). A value that
+  # warns when an agent runs (notes-agent-timeout.bats) stays silent here.
+  for setup in logged-out not-installed; do
+    builtin_agent_repo
+    if [ "$setup" = not-installed ]; then
+      rm "${SHIM}/claude" "${SHIM}/codex"
+      VB_PATH=$(path_without_agents)
+    fi
+
+    STUB_AUTH=out run_builtin auto RELEASE_NOTES_AGENT_TIMEOUT=abc
+    VB_PATH=""
+    assert_success
+    strip_ansi_output
+
+    assert_line --partial "No notes agent found (RELEASE_NOTES_AGENT=auto)"
+    refute_output --partial "RELEASE_NOTES_AGENT_TIMEOUT"
+    # Keep the run's output: each `run` below replaces $output.
+    local release_out=$output
+    # No line in the run is a warning ("!" after the gutter).
+    run grep -E '^[[:space:]]*! ' <<< "$release_out"
+    assert_failure 1
+    [ ! -f "${AGENT_REC}/ran" ] || bats_fail "an agent ran (${setup})"
+    assert_gh_argv "${SHIM}/argv" release create v1.3.0 --generate-notes --notes-start-tag v1.2.3
+  done
+}
+
 @test "auto agent: a picked agent that fails warns, publishes the fallback, and the other agent never runs (#165)" {
   local cause
 

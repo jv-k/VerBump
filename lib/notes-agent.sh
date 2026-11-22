@@ -74,19 +74,86 @@ build-notes-prompt() {
     "$(git diff --shortstat "$diff_from" "$end" ${scope_args[@]+"${scope_args[@]}"} 2>/dev/null)"
 }
 
+# The timeout a RELEASE_NOTES_AGENT_TIMEOUT that is not a positive integer
+# falls back to (R-REL-15).
+_NOTES_AGENT_TIMEOUT_DEFAULT=120
+
+# Watchdog state, global so the interrupt trap can reach it: the PIDs of the
+# agent and the timer (each leads its own process group) and the run's
+# temporary directories. Empty when no agent runs.
+_NOTES_AGENT_PID=""
+_NOTES_TIMER_PID=""
+_NOTES_AGENT_TMP=()
+
+# Set _NOTES_AGENT_TIMEOUT_S to RELEASE_NOTES_AGENT_TIMEOUT when it is a
+# positive integer; otherwise warn and use the default. Leading zeros are
+# stripped as text, not by arithmetic, so "08" is 8, not an octal error.
+_notes-agent-timeout() {
+  local value="${RELEASE_NOTES_AGENT_TIMEOUT-}" digits
+  case "$value" in
+    ''|*[!0-9]*) digits="" ;;
+    *) digits="${value#"${value%%[!0]*}"}" ;;
+  esac
+  if [ -z "$digits" ]; then
+    log_warn "RELEASE_NOTES_AGENT_TIMEOUT '${S_VAL-}${value}${RESET-}' is not a positive integer — using ${_NOTES_AGENT_TIMEOUT_DEFAULT} seconds."
+    digits=$_NOTES_AGENT_TIMEOUT_DEFAULT
+  fi
+  _NOTES_AGENT_TIMEOUT_S=$digits
+}
+
+# Stop whatever the watchdog still has running and remove its temporary
+# directories. Killing a process group is safe only while its leader is not
+# yet reaped (a reaped PID can be reused), so the caller clears
+# _NOTES_AGENT_PID once it has waited for the agent; the timer is always
+# killed before it is waited for.
+_notes-agent-cleanup() {
+  if [ -n "$_NOTES_TIMER_PID" ]; then
+    kill -TERM -- "-${_NOTES_TIMER_PID}" 2>/dev/null
+    wait "$_NOTES_TIMER_PID" 2>/dev/null
+  fi
+  if [ -n "$_NOTES_AGENT_PID" ]; then
+    kill -KILL -- "-${_NOTES_AGENT_PID}" 2>/dev/null
+    wait "$_NOTES_AGENT_PID" 2>/dev/null
+  fi
+  [ "${#_NOTES_AGENT_TMP[@]}" -gt 0 ] && rm -rf "${_NOTES_AGENT_TMP[@]}"
+  _NOTES_AGENT_PID="" _NOTES_TIMER_PID="" _NOTES_AGENT_TMP=()
+}
+
+# INT / TERM while the agent runs: the agent and the timer sit in their own
+# process groups, so a Ctrl-C at the terminal never reaches them. Stop them,
+# remove the temporary files, then die of the same signal so the exit status
+# says so (the exit is the fallback if the signal was ignored at startup).
+_notes-agent-interrupt() {
+  _notes-agent-cleanup
+  trap - INT TERM
+  kill -s "$1" "$$"
+  exit "$2"
+}
+
 # Run the notes agent <cmd> on the built prompt. The command is eval'd, like
 # VERBUMP_RELEASE_NOTES_CMD, so a value such as 'gemini -p' or
 # 'llm -m mymodel' splits into its arguments. It reads the prompt on stdin and
 # runs in a fresh empty temporary directory, so it has no repo to read or
 # change. Its stderr is discarded: an agent CLI's progress chatter is not run
 # output. On success, sets NOTES_AGENT_OUTPUT and returns 0. On a non-zero
-# exit, or on empty or whitespace-only output, sets NOTES_AGENT_ERROR to the
-# cause and returns 1; the caller warns and falls back.
+# exit, a timeout, or empty or whitespace-only output, sets NOTES_AGENT_ERROR
+# to the cause and returns 1; the caller warns and falls back.
+#
+# Watchdog (R-REL-15): macOS has no coreutils `timeout`, so the agent runs in
+# the background and a background timer stops it after
+# RELEASE_NOTES_AGENT_TIMEOUT seconds — TERM, then KILL 2 s later for an
+# agent that ignores TERM. Job control (set -m) starts each in its own
+# process group, so one kill reaches every process the agent or the timer
+# started (an agent CLI's children, the timer's sleep). The timer writes a
+# marker before it kills, which is how a timeout is told apart from an agent
+# that exits non-zero by itself. The timer, the agent and the temporary files
+# are cleaned up on every path, an interrupt included.
 # SC2034: NOTES_AGENT_ERROR is read by resolve-release-notes in another file.
 # shellcheck disable=SC2034
 run-notes-agent() {
-  local cmd=$1 scratch workdir rc
+  local cmd=$1 scratch workdir rc had_monitor=false saved_traps
   NOTES_AGENT_OUTPUT="" NOTES_AGENT_ERROR=""
+  _notes-agent-timeout
 
   # Prompt and output live outside the agent's directory, so it starts empty.
   scratch=$(mktemp -d) || { NOTES_AGENT_ERROR="could not start (mktemp failed)"; return 1; }
@@ -95,12 +162,42 @@ run-notes-agent() {
     NOTES_AGENT_ERROR="could not start (mktemp failed)"
     return 1
   }
-  build-notes-prompt > "${scratch}/prompt"
-  ( cd "$workdir" && eval "$cmd" ) < "${scratch}/prompt" > "${scratch}/out" 2>/dev/null
-  rc=$?
-  NOTES_AGENT_OUTPUT=$(cat "${scratch}/out")
-  rm -rf "$scratch" "$workdir"
+  _NOTES_AGENT_TMP=("$scratch" "$workdir")
+  saved_traps=$(trap -p INT TERM)
+  trap '_notes-agent-interrupt INT 130' INT
+  trap '_notes-agent-interrupt TERM 143' TERM
 
+  build-notes-prompt > "${scratch}/prompt"
+
+  case $- in *m*) had_monitor=true ;; esac
+  set -m
+  ( cd "$workdir" && eval "$cmd" ) < "${scratch}/prompt" > "${scratch}/out" 2>/dev/null &
+  _NOTES_AGENT_PID=$!
+  ( sleep "$_NOTES_AGENT_TIMEOUT_S"
+    : > "${scratch}/timed-out"
+    kill -TERM -- "-${_NOTES_AGENT_PID}" 2>/dev/null
+    sleep 2
+    kill -KILL -- "-${_NOTES_AGENT_PID}" 2>/dev/null
+  ) </dev/null >/dev/null 2>&1 &
+  _NOTES_TIMER_PID=$!
+  [ "$had_monitor" = true ] || set +m
+
+  # stderr off: bash reports a job killed by a signal ("Terminated") here.
+  wait "$_NOTES_AGENT_PID" 2>/dev/null
+  rc=$?
+  _NOTES_AGENT_PID=""
+  NOTES_AGENT_OUTPUT=$(cat "${scratch}/out")
+  if [ -f "${scratch}/timed-out" ]; then
+    NOTES_AGENT_ERROR="timed out after ${_NOTES_AGENT_TIMEOUT_S}s (RELEASE_NOTES_AGENT_TIMEOUT)"
+  fi
+  _notes-agent-cleanup
+  trap - INT TERM
+  eval "$saved_traps"
+
+  if [ -n "$NOTES_AGENT_ERROR" ]; then
+    NOTES_AGENT_OUTPUT=""
+    return 1
+  fi
   if [ "$rc" -ne 0 ]; then
     NOTES_AGENT_ERROR="exited ${rc}"
     NOTES_AGENT_OUTPUT=""

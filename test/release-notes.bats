@@ -132,20 +132,44 @@ assert_gh_argv() {
 
 # ── Notes agent: a user-named command (#162, ADR-24) ─────────────────────────
 
-# Stub notes agent: records its stdin, working directory and directory listing
-# under $AGENT_REC, then prints $AGENT_OUT and exits $AGENT_RC. A never-written
-# $AGENT_REC/stdin means it was never invoked.
+# Stub notes agent: records its PID, stdin, working directory and directory
+# listing under $AGENT_REC, sleeps $AGENT_SLEEP seconds when set, then prints
+# $AGENT_OUT and exits $AGENT_RC. A never-written $AGENT_REC/stdin means it
+# was never invoked. With $AGENT_AWAIT_SLEEP=<n> it first waits (a bounded
+# busy loop, so it starts no sleep of its own) until the shim has seen a
+# `sleep <n>`: a fast agent would otherwise finish before VerBump's timer
+# starts its sleep, and the test could not see which timeout it used.
+# Beside it, a `sleep` shim that appends "<pid> <seconds>" to
+# $AGENT_REC/sleeps and then execs the real sleep under the same PID, so a
+# test can find every sleep the run started (the stub's and VerBump's timer)
+# and check that none is left alive.
 agent_stub() {
-  local shim=$1
+  local shim=$1 real_sleep
+  real_sleep=$(command -v sleep)
   cat > "${shim}/notes-agent-stub" <<'SH'
 #!/bin/sh
+echo "$$" > "${AGENT_REC}/pid"
 cat > "${AGENT_REC}/stdin"
 pwd -P > "${AGENT_REC}/pwd"
 ls -A > "${AGENT_REC}/ls"
+if [ -n "${AGENT_AWAIT_SLEEP-}" ]; then
+  i=0
+  until grep -q -x "[0-9]* ${AGENT_AWAIT_SLEEP}" "${AGENT_REC}/sleeps" 2>/dev/null; do
+    i=$((i + 1))
+    [ "$i" -gt 5000 ] && break
+  done
+fi
+[ -n "${AGENT_SLEEP-}" ] && sleep "$AGENT_SLEEP"
 printf '%s' "${AGENT_OUT-}"
 exit "${AGENT_RC:-0}"
 SH
   chmod +x "${shim}/notes-agent-stub"
+  cat > "${shim}/sleep" <<SH
+#!/bin/sh
+[ -n "\${AGENT_REC-}" ] && echo "\$\$ \$*" >> "\${AGENT_REC}/sleeps"
+exec "${real_sleep}" "\$@"
+SH
+  chmod +x "${shim}/sleep"
 }
 
 # Set SHIM (a gh argv shim plus the agent stub, one PATH entry for both) and
@@ -450,4 +474,157 @@ release_output_with_agent() {
   run bash -c 'source "$1"; seq 1 3 | _notes-truncate 3' _ "${profile_script}"
   assert_success
   assert_output $'1\n2\n3'
+}
+
+# ── Notes agent timeout (#163, ADR-24) ───────────────────────────────────────
+
+# Fail unless every process the run started and recorded is gone: the stub
+# agent and every sleep the shim saw (the stub's own and VerBump's timer).
+# A killed process can take a moment to be reaped, so poll for up to 2 s.
+assert_no_agent_processes() {
+  local pids pid tries
+  pids=$(cat "${AGENT_REC}/pid" 2>/dev/null; cut -d' ' -f1 "${AGENT_REC}/sleeps" 2>/dev/null)
+  for pid in $pids; do
+    tries=0
+    while kill -0 "$pid" 2>/dev/null; do
+      tries=$((tries + 1))
+      [ "$tries" -le 20 ] || bats_fail "process ${pid} is still running after the run"
+      sleep 0.1
+    done
+  done
+}
+
+# A fresh, empty TMPDIR for the VerBump run, so the test can show that the
+# notes agent leaves no temporary file behind. Sets VB_TMP.
+vb_tmpdir() {
+  VB_TMP="${BATS_TEST_TMPDIR}/vb-tmp"
+  mkdir -p "$VB_TMP"
+}
+
+assert_vb_tmpdir_empty() {
+  run ls -A "$VB_TMP"
+  assert_output ""
+}
+
+@test "notes agent: a hung agent is stopped after RELEASE_NOTES_AGENT_TIMEOUT and the fallback is published (#163)" {
+  agent_release_repo
+  vb_tmpdir
+  local start=$SECONDS
+
+  AGENT_OUT="LATE" AGENT_SLEEP=30 RELEASE_NOTES_AGENT_TIMEOUT=1 TMPDIR="$VB_TMP" \
+    run_with_agent --release -p "$REMOTE" -b -c -v 1.3.0
+  assert_success
+  [ $((SECONDS - start)) -lt 10 ] || bats_fail "the run took $((SECONDS - start)) s"
+  strip_ansi_output
+
+  assert_output --partial "Notes agent 'notes-agent-stub' timed out after 1s (RELEASE_NOTES_AGENT_TIMEOUT)"
+  refute_output --partial "LATE"
+  assert_gh_argv "${SHIM}/argv" release create v1.3.0 --generate-notes --notes-start-tag v1.2.3
+}
+
+@test "notes agent: a timed-out run leaves no agent, timer or temporary file behind (#163)" {
+  agent_release_repo
+  vb_tmpdir
+
+  AGENT_SLEEP=30 RELEASE_NOTES_AGENT_TIMEOUT=1 TMPDIR="$VB_TMP" \
+    run_with_agent --release -p "$REMOTE" -b -c -v 1.3.0
+  assert_success
+
+  # The timer slept the configured timeout, and the stub's sleep was seen too.
+  run grep -c -x "[0-9]* 1" "${AGENT_REC}/sleeps"
+  assert_output "1"
+  run grep -c -x "[0-9]* 30" "${AGENT_REC}/sleeps"
+  assert_output "1"
+  assert_no_agent_processes
+  assert_vb_tmpdir_empty
+}
+
+@test "notes agent: a fast agent is not affected by the timeout and leaves nothing behind (#163)" {
+  agent_release_repo
+  vb_tmpdir
+  local start=$SECONDS
+
+  AGENT_OUT="FAST-NOTES" AGENT_AWAIT_SLEEP=30 RELEASE_NOTES_AGENT_TIMEOUT=30 TMPDIR="$VB_TMP" \
+    run_with_agent --release -p "$REMOTE" -b -c -v 1.3.0
+  assert_success
+  [ $((SECONDS - start)) -lt 10 ] || bats_fail "the run waited for the timer"
+  strip_ansi_output
+
+  refute_output --partial "timed out"
+  assert_gh_argv "${SHIM}/argv" release create v1.3.0 --notes FAST-NOTES
+  run grep -c -x "[0-9]* 30" "${AGENT_REC}/sleeps"
+  assert_output "1"
+  assert_no_agent_processes
+  assert_vb_tmpdir_empty
+}
+
+# Run a fast agent with RELEASE_NOTES_AGENT_TIMEOUT=<value> and check the
+# warning, that the timer used the 120 s default, and that the notes publish.
+assert_invalid_timeout_uses_default() {
+  local value=$1
+  agent_release_repo
+
+  AGENT_OUT="NOTES" AGENT_AWAIT_SLEEP=120 RELEASE_NOTES_AGENT_TIMEOUT="$value" \
+    run_with_agent --release -p "$REMOTE" -b -c -v 1.3.0
+  assert_success
+  strip_ansi_output
+
+  assert_output --partial "RELEASE_NOTES_AGENT_TIMEOUT '${value}' is not a positive integer — using 120 seconds"
+  assert_gh_argv "${SHIM}/argv" release create v1.3.0 --notes NOTES
+  run grep -c -x "[0-9]* 120" "${AGENT_REC}/sleeps"
+  assert_output "1"
+  assert_no_agent_processes
+}
+
+@test "notes agent: RELEASE_NOTES_AGENT_TIMEOUT=abc warns and uses 120 (#163)" {
+  assert_invalid_timeout_uses_default abc
+}
+
+@test "notes agent: RELEASE_NOTES_AGENT_TIMEOUT=0 warns and uses 120 (#163)" {
+  assert_invalid_timeout_uses_default 0
+}
+
+@test "notes agent: RELEASE_NOTES_AGENT_TIMEOUT=-5 warns and uses 120 (#163)" {
+  assert_invalid_timeout_uses_default -5
+}
+
+@test "notes agent: a valid timeout prints no timeout warning (#163)" {
+  agent_release_repo
+
+  AGENT_OUT="NOTES" RELEASE_NOTES_AGENT_TIMEOUT=45 \
+    run_with_agent --release -p "$REMOTE" -b -c -v 1.3.0
+  assert_success
+
+  refute_output --partial "RELEASE_NOTES_AGENT_TIMEOUT"
+}
+
+@test "notes agent: an interrupted run stops the agent and the timer and removes its temporary files (#163)" {
+  agent_release_repo
+  vb_tmpdir
+  local vb rc tries=0
+
+  # Background job, so the test can signal VerBump while the agent hangs.
+  # A non-interactive shell starts background jobs with SIGINT ignored, so
+  # the interrupt is SIGTERM.
+  ( PATH="${SHIM}:$PATH" GH_ARGV_DIR="${SHIM}/argv" AGENT_REC="$AGENT_REC" \
+      VERBUMP_RELEASE_NOTES_CMD='' RELEASE_NOTES_AGENT=notes-agent-stub \
+      AGENT_SLEEP=30 RELEASE_NOTES_AGENT_TIMEOUT=60 TMPDIR="$VB_TMP" \
+      exec ${profile_script} --release -p "$REMOTE" -b -c -v 1.3.0 \
+      </dev/null >"${BATS_TEST_TMPDIR}/out" 2>&1 ) &
+  vb=$!
+  until grep -q -x "[0-9]* 30" "${AGENT_REC}/sleeps" 2>/dev/null \
+     && grep -q -x "[0-9]* 60" "${AGENT_REC}/sleeps" 2>/dev/null; do
+    tries=$((tries + 1))
+    [ "$tries" -le 100 ] || { kill -KILL "$vb"; bats_fail "the agent and the timer never started"; }
+    sleep 0.1
+  done
+
+  kill -TERM "$vb"
+  rc=0
+  wait "$vb" || rc=$?
+
+  [ "$rc" -ne 0 ] || bats_fail "an interrupted run exited 0"
+  [ ! -f "${SHIM}/argv/1" ] || bats_fail "an interrupted run published a release"
+  assert_no_agent_processes
+  assert_vb_tmpdir_empty
 }

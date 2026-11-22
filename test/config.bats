@@ -333,3 +333,63 @@ RC
   assert_output --partial "Unknown .verbumprc key 'RELEASE_NOTE_AGENT'"
   assert_output --partial "Unknown .verbumprc key 'RELEASE_NOTES_PROMT'"
 }
+
+# Notes agent timeout key (#163, ADR-24) #######################################
+
+@test "load-config: round-trips RELEASE_NOTES_AGENT_TIMEOUT without the unknown-key warning" {
+  source ${profile_script}
+  local repo
+  repo="$(scratch_repo)"
+  cd "$repo"
+  unset RELEASE_NOTES_AGENT_TIMEOUT
+
+  printf 'RELEASE_NOTES_AGENT_TIMEOUT=45\n' > "$repo/.verbumprc"
+
+  run load-config
+  assert_success
+  strip_ansi_output
+  refute_output --partial "Unknown .verbumprc key"
+
+  load-config
+  apply-config-defaults
+  assert_equal "$RELEASE_NOTES_AGENT_TIMEOUT" "45"
+}
+
+@test "load-config: env RELEASE_NOTES_AGENT_TIMEOUT wins over the file" {
+  source ${profile_script}
+  local repo
+  repo="$(scratch_repo)"
+  cd "$repo"
+
+  printf 'RELEASE_NOTES_AGENT_TIMEOUT=45\n' > "$repo/.verbumprc"
+  export RELEASE_NOTES_AGENT_TIMEOUT=7
+  CLEANUP_CMDS+=("unset RELEASE_NOTES_AGENT_TIMEOUT")
+
+  load-config
+  apply-config-defaults
+  assert_equal "$RELEASE_NOTES_AGENT_TIMEOUT" "7"
+}
+
+@test "apply-config-defaults: RELEASE_NOTES_AGENT_TIMEOUT defaults to 120" {
+  source ${profile_script}
+  cd "$(scratch_repo)"
+  unset RELEASE_NOTES_AGENT_TIMEOUT
+
+  load-config
+  apply-config-defaults
+  assert_equal "$RELEASE_NOTES_AGENT_TIMEOUT" "120"
+}
+
+@test "load-config: a misspelt notes-agent timeout key gets the unknown-key warning" {
+  source ${profile_script}
+  local repo
+  repo="$(scratch_repo)"
+  cd "$repo"
+
+  printf 'RELEASE_NOTES_AGENT_TIMOUT=30\n' > "$repo/.verbumprc"
+
+  run load-config
+  assert_success
+  strip_ansi_output
+  assert_output --partial "Unknown .verbumprc key 'RELEASE_NOTES_AGENT_TIMOUT'"
+}

@@ -35,11 +35,15 @@ true
 #                 .verbumprc's own directory; scopes commit analysis to a
 #                 package in a monorepo. Default "." — a root rc, or no rc,
 #                 resolves to the repo root = whole-repo behaviour, R-MONO-1)
-#   RELEASE_NOTES_AGENT (notes agent for --release notes: off, the default,
-#                        or a command that reads the prompt on stdin;
+#   RELEASE_NOTES_AGENT (notes agent for --release notes: off, the default;
+#                        claude or codex, the built-in agents, R-REL-16; or
+#                        a command that reads the prompt on stdin;
 #                        VERBUMP_RELEASE_NOTES_CMD wins over it, R-REL-10)
 #   RELEASE_NOTES_PROMPT (guidance appended to the notes agent's built-in
 #                         prompt; empty = none, R-REL-11)
+#   RELEASE_NOTES_AGENT_TIMEOUT (seconds the notes agent may run before
+#                                VerBump stops it and falls back; default
+#                                120, R-REL-15)
 #   FLAG_NOBRANCH (deprecated, no-op — tag-in-place is the default as of 2.0)
 #
 # Safety: shell-sourced files are code. The rc must be owned by the current
@@ -52,7 +56,8 @@ _CONFIG_KEYS=(TAG_PREFIX REL_PREFIX PUSH_DEST COMMIT_MSG_PREFIX \
               FLAG_NOBRANCH FLAG_NOCHANGELOG FLAG_CHANGELOG_PAUSE \
               ALLOW_DIRTY NO_FETCH RELEASE_BRANCHES TAG_SIGN SOURCE_FILE \
               BUMP_FILES PRE_BUMP_CMD POST_TAG_CMD COMMIT_PATHS \
-              RELEASE_NOTES_AGENT RELEASE_NOTES_PROMPT)
+              RELEASE_NOTES_AGENT RELEASE_NOTES_PROMPT \
+              RELEASE_NOTES_AGENT_TIMEOUT)
 
 # Package scope resolved from COMMIT_PATHS by resolve-commit-scope (R-MONO-1).
 # VB_SCOPE_ACTIVE is true only when the scope is narrower than the repo root;
@@ -216,6 +221,10 @@ apply-config-defaults() {
   # The notes agent is opt-in (ADR-24): "off" keeps --release notes exactly
   # as they are without one (R-REL-10).
   RELEASE_NOTES_AGENT="${RELEASE_NOTES_AGENT:-off}"
+  # Seconds before a hung notes agent is stopped (R-REL-15). An invalid value
+  # is kept here and rejected with a warning only when the agent runs, so a
+  # bad value never warns on a run that has no notes agent.
+  RELEASE_NOTES_AGENT_TIMEOUT="${RELEASE_NOTES_AGENT_TIMEOUT:-$NOTES_AGENT_TIMEOUT_DEFAULT}"
 }
 
 # Resolve COMMIT_PATHS into the package scope (R-MONO-1, spec #128). Each

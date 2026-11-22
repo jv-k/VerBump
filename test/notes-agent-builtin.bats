@@ -411,32 +411,47 @@ path_without_agents() {
   assert_gh_argv "${SHIM}/argv" release create v1.3.0 --notes AUTO-NOTES
 }
 
+# run_auto_no_agent <setup> [VAR=value …]: in a fresh repo, `run` a live
+# --release with RELEASE_NOTES_AGENT=auto and neither agent available, then
+# strip ANSI from $output. <setup> is logged-out (both stubs logged out, no
+# key) or not-installed (neither stub on PATH).
+run_auto_no_agent() {
+  local setup=$1
+  shift
+  builtin_agent_repo
+  if [ "$setup" = not-installed ]; then
+    rm "${SHIM}/claude" "${SHIM}/codex"
+    VB_PATH=$(path_without_agents)
+  fi
+  STUB_AUTH=out AGENT_OUT="NOTES" run_builtin auto "$@"
+  VB_PATH=""
+  strip_ansi_output
+}
+
+# Fail unless the run_auto_no_agent run exited 0 with the no-agent info
+# line, printed no warning ("!" after the gutter), ran no agent and
+# published the fallback notes. It `run`s, so assert on $output first.
+assert_no_agent_fallback() {
+  local setup=$1 release_out=$output
+  assert_success
+  assert_line --partial "No notes agent found (RELEASE_NOTES_AGENT=auto)"
+  run grep -E '^[[:space:]]*! ' <<< "$release_out"
+  assert_failure 1
+  [ ! -f "${AGENT_REC}/ran" ] || bats_fail "an agent ran (${setup})"
+  assert_gh_argv "${SHIM}/argv" release create v1.3.0 --generate-notes --notes-start-tag v1.2.3
+}
+
 @test "auto agent: with neither agent available, one info line and no warning, the fallback notes and exit 0 (#165)" {
   local setup
 
   # Both logged out with no key, then neither installed: each in a fresh repo.
   for setup in logged-out not-installed; do
-    builtin_agent_repo
-    if [ "$setup" = not-installed ]; then
-      rm "${SHIM}/claude" "${SHIM}/codex"
-      VB_PATH=$(path_without_agents)
-    fi
-
-    STUB_AUTH=out AGENT_OUT="NOTES" run_builtin auto
-    VB_PATH=""
-    assert_success
-    strip_ansi_output
-
-    assert_line --partial "No notes agent found (RELEASE_NOTES_AGENT=auto)"
+    run_auto_no_agent "$setup"
     # Keep the run's output: each `run` below replaces $output.
     local release_out=$output
+    assert_no_agent_fallback "$setup"
     run grep -c "No notes agent found" <<< "$release_out"
     assert_output 1
-    # No line in the run is a warning ("!" after the gutter).
-    run grep -E '^[[:space:]]*! ' <<< "$release_out"
-    assert_failure 1
-    [ ! -f "${AGENT_REC}/ran" ] || bats_fail "an agent ran (${setup})"
-    assert_gh_argv "${SHIM}/argv" release create v1.3.0 --generate-notes --notes-start-tag v1.2.3
   done
 }
 
@@ -446,26 +461,9 @@ path_without_agents() {
   # No agent runs, so the timeout is never read (R-REL-19). A value that
   # warns when an agent runs (notes-agent-timeout.bats) stays silent here.
   for setup in logged-out not-installed; do
-    builtin_agent_repo
-    if [ "$setup" = not-installed ]; then
-      rm "${SHIM}/claude" "${SHIM}/codex"
-      VB_PATH=$(path_without_agents)
-    fi
-
-    STUB_AUTH=out run_builtin auto RELEASE_NOTES_AGENT_TIMEOUT=abc
-    VB_PATH=""
-    assert_success
-    strip_ansi_output
-
-    assert_line --partial "No notes agent found (RELEASE_NOTES_AGENT=auto)"
-    refute_output --partial "RELEASE_NOTES_AGENT_TIMEOUT"
-    # Keep the run's output: each `run` below replaces $output.
-    local release_out=$output
-    # No line in the run is a warning ("!" after the gutter).
-    run grep -E '^[[:space:]]*! ' <<< "$release_out"
-    assert_failure 1
-    [ ! -f "${AGENT_REC}/ran" ] || bats_fail "an agent ran (${setup})"
-    assert_gh_argv "${SHIM}/argv" release create v1.3.0 --generate-notes --notes-start-tag v1.2.3
+    run_auto_no_agent "$setup" RELEASE_NOTES_AGENT_TIMEOUT=abc
+    refute_output --partial "is not a positive integer"
+    assert_no_agent_fallback "$setup"
   done
 }
 

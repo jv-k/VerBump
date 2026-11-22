@@ -91,6 +91,10 @@ SH
 # shim and the stubs (SHIM, one PATH entry for both) and AGENT_REC.
 builtin_agent_repo() {
   releasable_repo
+  # One "version" line, so the bump makes no unrelated warning and a test
+  # can assert that a run prints no warning at all.
+  printf '{\n  "version": "1.2.3"\n}\n' > package.json
+  git commit -qam "chore: format package.json"
   printf 'feature\n' > feature.txt
   git add feature.txt
   git commit -qm "feat: add the feature file"
@@ -419,10 +423,12 @@ path_without_agents() {
     strip_ansi_output
 
     assert_line --partial "No notes agent found (RELEASE_NOTES_AGENT=auto)"
-    run grep -c "No notes agent found" <<< "$output"
+    # Keep the run's output: each `run` below replaces $output.
+    local release_out=$output
+    run grep -c "No notes agent found" <<< "$release_out"
     assert_output 1
     # No line in the run is a warning ("!" after the gutter).
-    run grep -E '^[[:space:]]*! ' <<< "$output"
+    run grep -E '^[[:space:]]*! ' <<< "$release_out"
     assert_failure 1
     [ ! -f "${AGENT_REC}/ran" ] || bats_fail "an agent ran (${setup})"
     assert_gh_argv "${SHIM}/argv" release create v1.3.0 --generate-notes --notes-start-tag v1.2.3

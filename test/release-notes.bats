@@ -12,11 +12,12 @@ load 'test_helper'
 
 # gh shim: `auth status` succeeds; every other call writes each argument to
 # its own file under $GH_ARGV_DIR (1, 2, …) so multi-line notes survive
-# intact. Prints the shim's directory; the caller prepends it to PATH.
+# intact. Prints the shim's directory; the caller prepends it to PATH and
+# registers its cleanup, because a CLEANUP_CMDS entry made here is lost in the
+# caller's $(...) subshell.
 gh_argv_shim() {
   local shim
   shim=$(mktemp -d)
-  CLEANUP_CMDS+=("rm -rf ${shim}")
   mkdir -p "${shim}/argv"
   cat > "${shim}/gh" <<'SH'
 #!/bin/sh
@@ -54,6 +55,7 @@ assert_gh_argv() {
   CLEANUP_CMDS+=("rm -rf ${remote}")
   git init -q --bare "$remote"
   shim=$(gh_argv_shim)
+  CLEANUP_CMDS+=("rm -rf ${shim}")
 
   PATH="${shim}:$PATH" GH_ARGV_DIR="${shim}/argv" VERBUMP_RELEASE_NOTES_CMD='' \
     run ${profile_script} --release -p "$remote" -b -c -v 1.3.0 </dev/null
@@ -73,6 +75,7 @@ assert_gh_argv() {
   monorepo_fixture
   cd packages/pkg-a
   shim=$(gh_argv_shim)
+  CLEANUP_CMDS+=("rm -rf ${shim}")
 
   PATH="${shim}:$PATH" GH_ARGV_DIR="${shim}/argv" VERBUMP_RELEASE_NOTES_CMD='' \
     run ${profile_script} --release -p origin -b -c -v 1.2.4 </dev/null

@@ -166,7 +166,7 @@ assert_no_account_details() {
   assert_gh_argv "${SHIM}/argv" release create v1.3.0 --notes "$notes"
 }
 
-@test "builtin agent: claude runs non-interactively with no tools and no saved session (#164)" {
+@test "builtin agent: claude runs non-interactively with no tools, no MCP servers and no saved session (#164)" {
   builtin_agent_repo
 
   STUB_AUTH=subscription AGENT_OUT="NOTES" run_builtin claude
@@ -176,10 +176,11 @@ assert_no_account_details() {
   assert_agent_flag --output-format json
   assert_agent_flag --tools ""
   assert_agent_flag --no-session-persistence
+  assert_agent_flag --strict-mcp-config
   grep -q -F "Write the GitHub release notes" "${AGENT_REC}/stdin" || bats_fail "claude did not get the built-in prompt"
 }
 
-@test "builtin agent: codex runs non-interactively in a read-only sandbox with no tools and no saved session (#164)" {
+@test "builtin agent: codex runs non-interactively in a read-only sandbox with no tools, no user config and no saved session (#164)" {
   builtin_agent_repo
 
   STUB_AUTH=subscription AGENT_OUT="NOTES" run_builtin codex
@@ -190,6 +191,7 @@ assert_no_account_details() {
   assert_agent_flag --sandbox read-only
   assert_agent_flag --skip-git-repo-check
   assert_agent_flag --ephemeral
+  assert_agent_flag --ignore-user-config
   assert_agent_flag --disable shell_tool
   assert_agent_flag -c 'web_search="disabled"'
   assert_agent_flag --output-last-message
@@ -272,21 +274,18 @@ path_without_agents() {
 }
 
 @test "builtin agent: a built-in agent that is not installed warns, publishes the fallback and exits 0, never 3 (#164)" {
-  builtin_agent_repo
-  rm "${SHIM}/claude" "${SHIM}/codex"
   local agent
 
+  # Each agent cuts the same release in a fresh repo.
   for agent in claude codex; do
+    builtin_agent_repo
+    rm "${SHIM}/claude" "${SHIM}/codex"
+
     VB_PATH=$(path_without_agents) run_builtin "$agent" ANTHROPIC_API_KEY=sk-caller OPENAI_API_KEY=sk-caller
     assert_success
     strip_ansi_output
     assert_output --partial "Notes agent '${agent}' is not installed (no '${agent}' on PATH)"
     assert_gh_argv "${SHIM}/argv" release create v1.3.0 --generate-notes --notes-start-tag v1.2.3
-    # The next agent cuts the same release again in a fresh repo.
-    rm -f "${SHIM}/argv/"*
-    cd "$repo_dir"
-    builtin_agent_repo
-    rm "${SHIM}/claude" "${SHIM}/codex"
   done
 }
 
@@ -301,7 +300,6 @@ path_without_agents() {
     refute_output --partial "progress on stdout"
     refute_output --partial "progress on stderr"
     assert_gh_argv "${SHIM}/argv" release create v1.3.0 --notes FINAL
-    cd "$repo_dir"
   done
 }
 
@@ -317,7 +315,6 @@ path_without_agents() {
     # gh release create runs after the agent, in VerBump's own environment.
     run cat "${SHIM}/argv/env"
     assert_output "ANTHROPIC_API_KEY=set OPENAI_API_KEY=set"
-    cd "$repo_dir"
   done
 }
 
@@ -331,7 +328,6 @@ path_without_agents() {
         run_builtin "$agent" ANTHROPIC_API_KEY=sk-caller OPENAI_API_KEY=sk-caller
       assert_success
       assert_no_account_details
-      cd "$repo_dir"
     done
   done
 }

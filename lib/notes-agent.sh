@@ -193,24 +193,27 @@ _resolve-notes-builtin() {
   fi
 }
 
-# Run claude on the prompt (stdin): print mode, no tools, no saved session.
+# Run claude on the prompt (stdin): print mode, no built-in tools, no MCP
+# servers (--strict-mcp-config with no --mcp-config), no saved session.
 # Its stdout carries one JSON object per line next to anything else it
 # prints, so only the result field of the "result" object is kept — the
 # final message, never the progress.
 _notes-agent-claude() {
   local out
-  out=$(claude -p --output-format json --tools '' --no-session-persistence) || return
+  out=$(claude -p --output-format json --tools '' --strict-mcp-config \
+    --no-session-persistence) || return
   printf '%s\n' "$out" \
     | jq -R -r 'fromjson? | select(type == "object" and .type == "result") | .result // empty'
 }
 
 # Run codex on the prompt (stdin): exec mode in a read-only sandbox, outside
-# a git repo, with no shell or web-search tool and no saved session. codex
+# a git repo, with no shell or web-search tool, without the user's
+# config.toml (so none of its MCP servers) and no saved session. codex
 # writes its final message to the --output-last-message file; its stdout
 # (progress, then that message again) is discarded.
 _notes-agent-codex() {
   local last="${_NOTES_AGENT_SCRATCH}/codex-last-message"
-  codex exec --sandbox read-only --skip-git-repo-check --ephemeral \
+  codex exec --sandbox read-only --skip-git-repo-check --ephemeral --ignore-user-config \
     --disable shell_tool -c 'web_search="disabled"' \
     --output-last-message "$last" - >/dev/null || return
   cat "$last"

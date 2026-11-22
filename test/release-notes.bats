@@ -101,7 +101,9 @@ load 'release_notes_helper'
 # was never invoked. With $AGENT_AWAIT_SLEEP=<n> it first waits (a bounded
 # busy loop, so it starts no sleep of its own) until the shim has seen a
 # `sleep <n>`: a fast agent would otherwise finish before VerBump's timer
-# starts its sleep, and the test could not see which timeout it used.
+# starts its sleep, and the test could not see which timeout it used. With
+# $AGENT_CHILD_SLEEP=<n> it first starts a child that ignores TERM and sleeps
+# <n> seconds, and records the child's PID in $AGENT_REC/child.
 # Beside it, a `sleep` shim that appends "<pid> <seconds>" to
 # $AGENT_REC/sleeps and then execs the real sleep under the same PID, so a
 # test can find every sleep the run started (the stub's and VerBump's timer)
@@ -115,6 +117,10 @@ echo "$$" > "${AGENT_REC}/pid"
 cat > "${AGENT_REC}/stdin"
 pwd -P > "${AGENT_REC}/pwd"
 ls -A > "${AGENT_REC}/ls"
+if [ -n "${AGENT_CHILD_SLEEP-}" ]; then
+  ( trap '' TERM; exec sleep "$AGENT_CHILD_SLEEP" ) &
+  echo "$!" > "${AGENT_REC}/child"
+fi
 if [ -n "${AGENT_AWAIT_SLEEP-}" ]; then
   i=0
   until grep -q -x "[0-9]* ${AGENT_AWAIT_SLEEP}" "${AGENT_REC}/sleeps" 2>/dev/null; do
@@ -442,11 +448,13 @@ release_output_with_agent() {
 # ── Notes agent timeout (#163, ADR-24) ───────────────────────────────────────
 
 # Fail unless every process the run started and recorded is gone: the stub
-# agent and every sleep the shim saw (the stub's own and VerBump's timer).
-# A killed process can take a moment to be reaped, so poll for up to 2 s.
+# agent, its child (when it started one) and every sleep the shim saw (the
+# stub's own and VerBump's timer). A killed process can take a moment to be
+# reaped, so poll for up to 2 s.
 assert_no_agent_processes() {
   local pids pid tries
-  pids=$(cat "${AGENT_REC}/pid" 2>/dev/null; cut -d' ' -f1 "${AGENT_REC}/sleeps" 2>/dev/null)
+  pids=$(cat "${AGENT_REC}/pid" "${AGENT_REC}/child" 2>/dev/null
+         cut -d' ' -f1 "${AGENT_REC}/sleeps" 2>/dev/null)
   for pid in $pids; do
     tries=0
     while kill -0 "$pid" 2>/dev/null; do
@@ -502,6 +510,26 @@ assert_slept_once() {
   # The timer slept the configured timeout, and the stub's sleep was seen too.
   assert_slept_once 1
   assert_slept_once 30
+  assert_no_agent_processes
+  assert_vb_tmpdir_empty
+}
+
+@test "notes agent: a timed-out agent's child that ignores TERM does not outlive the run (#163)" {
+  local child
+  agent_release_repo
+  vb_tmpdir
+
+  # The agent dies of the timeout's TERM; its child ignores TERM, so only
+  # the KILL escalation can stop it.
+  AGENT_SLEEP=30 AGENT_CHILD_SLEEP=40 RELEASE_NOTES_AGENT_TIMEOUT=1 TMPDIR="$VB_TMP" \
+    run_with_agent --release -p "$REMOTE" -b -c -v 1.3.0
+  child=$(cat "${AGENT_REC}/child" 2>/dev/null) || bats_fail "the stub started no child"
+  CLEANUP_CMDS+=("kill -KILL ${child} 2>/dev/null || true")
+  assert_success
+  strip_ansi_output
+
+  assert_output --partial "Notes agent 'notes-agent-stub' timed out after 1s (RELEASE_NOTES_AGENT_TIMEOUT)"
+  assert_gh_argv "${SHIM}/argv" release create v1.3.0 --generate-notes --notes-start-tag v1.2.3
   assert_no_agent_processes
   assert_vb_tmpdir_empty
 }
@@ -564,6 +592,23 @@ assert_invalid_timeout_uses_default() {
   refute_output --partial "RELEASE_NOTES_AGENT_TIMEOUT"
 }
 
+# Wait until the background job <pid> has a hung agent (the stub's `sleep
+# 30`) and the timer (`sleep 60`) running, send it <signal>, and wait for it
+# to end. Sets SIGNAL_RC to its exit status.
+signal_once_agent_runs() {
+  local pid=$1 signal=$2 tries=0
+  until grep -q -x "[0-9]* 30" "${AGENT_REC}/sleeps" 2>/dev/null \
+     && grep -q -x "[0-9]* 60" "${AGENT_REC}/sleeps" 2>/dev/null; do
+    tries=$((tries + 1))
+    [ "$tries" -le 100 ] || { kill -KILL "$pid"; bats_fail "the agent and the timer never started"; }
+    sleep 0.1
+  done
+
+  kill -s "$signal" "$pid"
+  SIGNAL_RC=0
+  wait "$pid" 2>/dev/null || SIGNAL_RC=$?
+}
+
 # Start VerBump as a background job with a hung agent and a 60 s timeout,
 # send it <signal> once the agent and the timer are both running, and check
 # that it dies of that signal (exit <code>) leaving no agent, timer or
@@ -571,7 +616,7 @@ assert_invalid_timeout_uses_default() {
 # a non-interactive shell otherwise starts background jobs with SIGINT
 # ignored, and a Ctrl-C could not be simulated.
 assert_interrupt_cleans_up() {
-  local signal=$1 code=$2 vb rc tries=0
+  local signal=$1 code=$2 vb
   agent_release_repo
   vb_tmpdir
 
@@ -583,18 +628,9 @@ assert_interrupt_cleans_up() {
       </dev/null >"${BATS_TEST_TMPDIR}/out" 2>&1 ) &
   vb=$!
   set +m
-  until grep -q -x "[0-9]* 30" "${AGENT_REC}/sleeps" 2>/dev/null \
-     && grep -q -x "[0-9]* 60" "${AGENT_REC}/sleeps" 2>/dev/null; do
-    tries=$((tries + 1))
-    [ "$tries" -le 100 ] || { kill -KILL "$vb"; bats_fail "the agent and the timer never started"; }
-    sleep 0.1
-  done
+  signal_once_agent_runs "$vb" "$signal"
 
-  kill -s "$signal" "$vb"
-  rc=0
-  wait "$vb" 2>/dev/null || rc=$?
-
-  assert_equal "$rc" "$code"
+  assert_equal "$SIGNAL_RC" "$code"
   [ ! -f "${SHIM}/argv/1" ] || bats_fail "an interrupted run published a release"
   assert_no_agent_processes
   assert_vb_tmpdir_empty
@@ -606,4 +642,54 @@ assert_interrupt_cleans_up() {
 
 @test "notes agent: SIGTERM stops the agent and the timer and removes the temporary files (#163)" {
   assert_interrupt_cleans_up TERM 143
+}
+
+# Run run-notes-agent from a caller script that sources VerBump and sets its
+# own <signal> trap, <handler>, then send the caller <signal> while the agent
+# hangs. The caller runs under /bin/bash, the interpreter verbump.sh names,
+# so on macOS this is bash 3.2. The handler runs with HANDLER_MARK set to a
+# file it can write. Sets SIGNAL_RC to the caller's exit status.
+interrupt_trapping_caller() {
+  local signal=$1 handler=$2 caller="${BATS_TEST_TMPDIR}/caller.sh" pid
+  agent_tools
+  vb_tmpdir
+  HANDLER_MARK="${BATS_TEST_TMPDIR}/handler-ran"
+  cat > "$caller" <<'SH'
+source "$1"
+# The prompt's content does not matter here, and building it needs a release.
+build-notes-prompt() { echo "prompt"; }
+trap "$2" "$3"
+run-notes-agent notes-agent-stub
+echo "run-notes-agent returned"
+SH
+
+  set -m
+  ( PATH="${SHIM}:$PATH" AGENT_REC="$AGENT_REC" HANDLER_MARK="$HANDLER_MARK" \
+      AGENT_SLEEP=30 RELEASE_NOTES_AGENT_TIMEOUT=60 TMPDIR="$VB_TMP" \
+      exec /bin/bash "$caller" "$profile_script" "$handler" "$signal" \
+      </dev/null >"${BATS_TEST_TMPDIR}/out" 2>&1 ) &
+  pid=$!
+  set +m
+  signal_once_agent_runs "$pid" "$signal"
+
+  assert_no_agent_processes
+  assert_vb_tmpdir_empty
+  run cat "${BATS_TEST_TMPDIR}/out"
+  refute_output --partial "run-notes-agent returned"
+}
+
+@test "notes agent: Ctrl-C (SIGINT) runs the caller's INT trap, then ends the run with 130 (#163)" {
+  interrupt_trapping_caller INT 'echo "INT handler ran" > "$HANDLER_MARK"'
+
+  assert_equal "$SIGNAL_RC" 130
+  run cat "$HANDLER_MARK"
+  assert_output "INT handler ran"
+}
+
+@test "notes agent: SIGTERM runs the caller's TERM trap, which sets the exit status (#163)" {
+  interrupt_trapping_caller TERM 'echo "TERM handler ran" > "$HANDLER_MARK"; exit 7'
+
+  assert_equal "$SIGNAL_RC" 7
+  run cat "$HANDLER_MARK"
+  assert_output "TERM handler ran"
 }

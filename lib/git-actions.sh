@@ -306,7 +306,7 @@ resolve-release-notes() {
       RELEASE_NOTES_ARGS=(--notes "$RELEASE_NOTES_TEXT")
       return 0
     fi
-    log_warn "Notes agent '${S_VAL-}${agent}${RESET-}' ${NOTES_AGENT_ERROR} — publishing the release notes VerBump writes without it."
+    log_warn "Notes agent '${S_VAL-}${agent}${RESET-}' ${NOTES_AGENT_ERROR} — publishing the release notes this release has without a notes agent."
   fi
 
   if [ -n "$notes_cmd" ]; then

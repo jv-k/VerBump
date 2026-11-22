@@ -42,18 +42,14 @@ _notes-truncate() {
 # the full history up to the new tag. Under a package scope every block covers
 # only the scope.
 build-notes-prompt() {
-  local tag_new="${TAG_PREFIX}${V_NEW}" tag_prev="${TAG_PREFIX}${V_PREV-}"
-  local end log_span diff_from
+  local end from log_span diff_from
   local -a scope_args=()
   [ "${VB_SCOPE_ACTIVE:-false}" = true ] && scope_args=(-- "${VB_SCOPE_PATHS[@]}")
 
-  # The agent runs after the push, so the new tag exists; HEAD keeps a direct
-  # call (tests, a future preview) from failing when it does not.
-  end="HEAD"
-  git rev-parse --verify --quiet "refs/tags/${tag_new}" >/dev/null && end="$tag_new"
-  if [ -n "${V_PREV-}" ] && git rev-parse --verify --quiet "refs/tags/${tag_prev}" >/dev/null; then
-    log_span="${tag_prev}..${end}"
-    diff_from="$tag_prev"
+  read -r end from <<< "$(release-notes-range)"
+  if [ -n "$from" ]; then
+    log_span="${from}..${end}"
+    diff_from="$from"
   else
     # No previous tag: diff against the empty tree, i.e. the full history.
     log_span="$end"
@@ -70,9 +66,12 @@ build-notes-prompt() {
   printf '\n<commits range="%s">\n%s\n</commits>\n' "$log_span" \
     "$(git log --format='%h %s%n%w(0,4,4)%b' "$log_span" ${scope_args[@]+"${scope_args[@]}"} 2>/dev/null \
        | _notes-truncate "$_NOTES_COMMITS_MAX_LINES")"
-  printf '\n<diffstat>\n%s\n</diffstat>\n' \
+  # The per-file lines are cut; git's "N files changed" totals line (its
+  # last line, re-read with --shortstat) always survives the cut.
+  printf '\n<diffstat>\n%s\n%s\n</diffstat>\n' \
     "$(git diff --stat "$diff_from" "$end" ${scope_args[@]+"${scope_args[@]}"} 2>/dev/null \
-       | _notes-truncate "$_NOTES_DIFFSTAT_MAX_LINES")"
+       | sed '$d' | _notes-truncate "$_NOTES_DIFFSTAT_MAX_LINES")" \
+    "$(git diff --shortstat "$diff_from" "$end" ${scope_args[@]+"${scope_args[@]}"} 2>/dev/null)"
 }
 
 # Run the notes agent <cmd> on the built prompt. The command is eval'd, like
@@ -90,8 +89,12 @@ run-notes-agent() {
   NOTES_AGENT_OUTPUT="" NOTES_AGENT_ERROR=""
 
   # Prompt and output live outside the agent's directory, so it starts empty.
-  scratch=$(mktemp -d)
-  workdir=$(mktemp -d)
+  scratch=$(mktemp -d) || { NOTES_AGENT_ERROR="could not start (mktemp failed)"; return 1; }
+  workdir=$(mktemp -d) || {
+    rm -rf "$scratch"
+    NOTES_AGENT_ERROR="could not start (mktemp failed)"
+    return 1
+  }
   build-notes-prompt > "${scratch}/prompt"
   ( cd "$workdir" && eval "$cmd" ) < "${scratch}/prompt" > "${scratch}/out" 2>/dev/null
   rc=$?
@@ -104,7 +107,7 @@ run-notes-agent() {
     return 1
   fi
   if [ -z "${NOTES_AGENT_OUTPUT//[[:space:]]/}" ]; then
-    NOTES_AGENT_ERROR="returned empty output"
+    NOTES_AGENT_ERROR="returned empty or whitespace-only output"
     NOTES_AGENT_OUTPUT=""
     return 1
   fi

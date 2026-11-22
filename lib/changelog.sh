@@ -336,6 +336,22 @@ do-changelog() {
   dryrun git add CHANGELOG.md
 }
 
+# The commit range a release's notes cover, shared by render-release-notes
+# and build-notes-prompt (lib/notes-agent.sh) so the two can't drift. Prints
+# "<end> <from>". <end> is the new tag when it exists (the live path, after
+# do-tag), else HEAD (dry-run, before any tag). <from> is the previous tag
+# when it exists, else empty: no previous tag means the full history up to
+# <end>. Tag names cannot contain spaces, so `read -r end from` splits it.
+release-notes-range() {
+  local tag_new="${TAG_PREFIX}${V_NEW}" tag_prev="${TAG_PREFIX}${V_PREV-}"
+  local end="HEAD" from=""
+  git rev-parse --verify --quiet "refs/tags/${tag_new}" >/dev/null && end="$tag_new"
+  if [ -n "${V_PREV-}" ] && git rev-parse --verify --quiet "refs/tags/${tag_prev}" >/dev/null; then
+    from="$tag_prev"
+  fi
+  printf '%s %s\n' "$end" "$from"
+}
+
 # Render the GitHub release-notes body for a package-scoped release
 # (R-MONO-9): the package's changelog entry in the GROUPED style — heading,
 # sections, commit links, compare link — regardless of CHANGELOG_STYLE.
@@ -348,20 +364,17 @@ do-changelog() {
 # HEAD and the bump commit's entry is synthesised exactly as do-changelog
 # does.
 render-release-notes() {
-  local tag_new="${TAG_PREFIX}${V_NEW}" tag_prev="${TAG_PREFIX}${V_PREV-}"
-  local end synth="" range="" span records
+  local end from synth="" range="" span records
   local -a scope_args=()
   [ "${VB_SCOPE_ACTIVE:-false}" = true ] && scope_args=(-- "${VB_SCOPE_PATHS[@]}")
 
-  if git rev-parse --verify --quiet "refs/tags/${tag_new}" >/dev/null; then
-    end="$tag_new"
-  else
-    end="HEAD"
+  read -r end from <<< "$(release-notes-range)"
+  if [ "$end" = HEAD ]; then
     synth=$(render-commit-msg "$GIT_MSG")
     synth="${synth%%$'\n'*}"
   fi
-  if [ -n "${V_PREV-}" ] && git rev-parse --verify --quiet "refs/tags/${tag_prev}" >/dev/null; then
-    span="${tag_prev}..${end}"
+  if [ -n "$from" ]; then
+    span="${from}..${end}"
     range="$span" # non-empty = the compare-link condition (R-CHLOG-3)
   else
     span="$end"

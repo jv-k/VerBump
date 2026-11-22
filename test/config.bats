@@ -267,3 +267,69 @@ EOF
   assert_equal "$FLAG_NOCHANGELOG" "true"
   assert_equal "$FLAG_CHANGELOG_PAUSE" "true"
 }
+
+# Notes agent keys (#162, ADR-24) ##############################################
+
+@test "load-config: round-trips RELEASE_NOTES_AGENT and RELEASE_NOTES_PROMPT" {
+  source ${profile_script}
+  local repo
+  repo="$(scratch_repo)"
+  cd "$repo"
+  unset RELEASE_NOTES_AGENT RELEASE_NOTES_PROMPT
+
+  cat > "$repo/.verbumprc" <<'RC'
+RELEASE_NOTES_AGENT="gemini -p"
+RELEASE_NOTES_PROMPT="Group changes by user impact."
+RC
+
+  run load-config
+  assert_success
+  refute_output --partial "Unknown .verbumprc key"
+
+  load-config
+  apply-config-defaults
+  assert_equal "$RELEASE_NOTES_AGENT" "gemini -p"
+  assert_equal "$RELEASE_NOTES_PROMPT" "Group changes by user impact."
+}
+
+@test "load-config: env RELEASE_NOTES_AGENT and RELEASE_NOTES_PROMPT win over the file" {
+  source ${profile_script}
+  local repo
+  repo="$(scratch_repo)"
+  cd "$repo"
+
+  printf 'RELEASE_NOTES_AGENT=from-file\nRELEASE_NOTES_PROMPT=from-file\n' > "$repo/.verbumprc"
+  export RELEASE_NOTES_AGENT=from-env RELEASE_NOTES_PROMPT=from-env
+  CLEANUP_CMDS+=("unset RELEASE_NOTES_AGENT RELEASE_NOTES_PROMPT")
+
+  load-config
+  apply-config-defaults
+  assert_equal "$RELEASE_NOTES_AGENT" "from-env"
+  assert_equal "$RELEASE_NOTES_PROMPT" "from-env"
+}
+
+@test "apply-config-defaults: RELEASE_NOTES_AGENT defaults to off" {
+  source ${profile_script}
+  cd "$(scratch_repo)"
+  unset RELEASE_NOTES_AGENT RELEASE_NOTES_PROMPT
+
+  load-config
+  apply-config-defaults
+  assert_equal "$RELEASE_NOTES_AGENT" "off"
+  assert_equal "${RELEASE_NOTES_PROMPT-}" ""
+}
+
+@test "load-config: a misspelt notes-agent key gets the unknown-key warning" {
+  source ${profile_script}
+  local repo
+  repo="$(scratch_repo)"
+  cd "$repo"
+
+  printf 'RELEASE_NOTE_AGENT=auto\nRELEASE_NOTES_PROMT=x\n' > "$repo/.verbumprc"
+
+  run load-config
+  assert_success
+  strip_ansi_output
+  assert_output --partial "Unknown .verbumprc key 'RELEASE_NOTE_AGENT'"
+  assert_output --partial "Unknown .verbumprc key 'RELEASE_NOTES_PROMT'"
+}

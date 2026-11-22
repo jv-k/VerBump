@@ -190,6 +190,8 @@ lib/changelog.sh     CHANGELOG.md generation + commit-message assembly
 lib/git-checks.sh    repo preconditions (commits exist, tree clean, …)
 lib/git-actions.sh   side-effecting git ops (branch, commit, tag, push,
                      GitHub release, undo) + the dryrun helper
+lib/notes-agent.sh   notes agent for --release notes: prompt + context
+                     build, run in an empty dir, failure → fallback (ADR-24)
 lib/config.sh        .verbumprc discovery, safety checks, precedence
 lib/json.sh          atomic jq_inplace JSON writes
 lib/effects.sh       --dry-run --json effects accumulator + emitter (R-OUT-5)

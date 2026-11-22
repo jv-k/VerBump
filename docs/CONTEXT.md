@@ -86,6 +86,19 @@ phase (`PRE_BUMP_CMD`, `POST_TAG_CMD`). Hook failure is the sole meaning of
 exit code `4`; a fuller plugin system is a non-goal.
 _Avoid_: plugin, lifecycle script
 
+**Release notes**:
+The body of the GitHub release that `--release` publishes for a tag. Distinct
+from the changelog entry, which lives in `CHANGELOG.md` and ships inside the
+bump commit; release notes live only on GitHub.
+_Avoid_: changelog (for the release body), release description
+
+**Notes agent**:
+The external LLM command-line tool (`claude`, `codex`, or a user-named
+command) that an opt-in release asks to write its release notes. It is an
+improvement, never a requirement: when no notes agent can run, the release
+publishes the notes it would have published without one.
+_Avoid_: AI, LLM, provider, model
+
 **Local undo**:
 Reverting a just-cut release — tag, release branch, bump commit — before
 anything is pushed. It never touches a remote.

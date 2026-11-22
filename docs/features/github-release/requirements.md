@@ -14,6 +14,13 @@ Resolves the "automate a release" ask (issue #25, #43).
 | R-REL-7 | Prerelease versions publish as GitHub **prereleases** (`--prerelease`). | ✅ shipped (`0c565f8`) |
 | R-REL-8 | Pipeline hardened: push gate enforced, `gh auth status` preflighted, `-n` blocks release. | ✅ shipped (`93b76e4`) |
 | R-REL-9 | `DO_RELEASE` is CLI-only — env/`.verbumprc` can never trigger a release (R-CFG-6). | ✅ shipped (`783f457`) |
+| R-REL-10 | `RELEASE_NOTES_AGENT` (`.verbumprc` or env, env wins; default `off`) names a notes agent: a command that reads a prompt on stdin. On a live `--release` run, after the push, its stdout is published with `gh release create … --notes`. `off` (or unset) gives output identical to a run without the key. `VERBUMP_RELEASE_NOTES_CMD` takes precedence and keeps its abort-on-failure behaviour (R-REL-6). | ✅ shipped (#162) — `test/release-notes.bats` |
+| R-REL-11 | The agent's stdin holds the built-in prompt (Markdown notes for the project's users, facts from the context only, `#N` references kept, no title or version heading, the notes body only), then the `RELEASE_NOTES_PROMPT` guidance, then the context in delimited blocks: the changelog entry (the grouped rendering of R-MONO-9), the commit list (subject and body) and the diffstat for the previous tag → new tag range, or the full history when there is no previous tag. Under a package scope every block covers only the scope. The commit list and diffstat have a line limit and end with a marker line when cut. | ✅ shipped (#162) |
+| R-REL-12 | The agent runs in a fresh empty temporary directory, not the repo. On success the run prints an info line naming the notes agent, then the notes, on the normal progress channel (stderr under `--quiet`, so stdout keeps only the version). | ✅ shipped (#162) |
+| R-REL-13 | A notes agent is never fatal: a non-zero exit, or empty or whitespace-only output, prints one warning naming the cause and publishes the fallback notes — `gh --generate-notes` anchored to the previous tag at whole-repo scope, the package's changelog entry under a package scope. The exit code stays `0`. | ✅ shipped (#162) |
+| R-REL-14 | The notes agent never runs without `--release`, after a failed push, or under `--dry-run`. A prerelease still publishes with `--prerelease` (R-REL-7). | ✅ shipped (#162) |
 
-Modules: `lib/args.sh` (parse), `lib/git-actions.sh` (`do-github-release`).
-Tests: `test/release.bats`.
+Modules: `lib/args.sh` (parse), `lib/git-actions.sh` (`resolve-release-notes`,
+`do-github-release`), `lib/notes-agent.sh` (`build-notes-prompt`,
+`run-notes-agent`, ADR-24).
+Tests: `test/release.bats`, `test/release-notes.bats`.

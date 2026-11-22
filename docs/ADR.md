@@ -568,3 +568,60 @@ prefixed repos whose auto-picked baseline differed — an intended fix, noted
 for the release notes. The user docs gain a monorepo guide and an updated
 feature comparison; the runtime contract (`bash` + `git` + `jq`) is
 unchanged.
+
+## ADR-24 — Notes agent writes `--release` notes; opt-in, never fatal, subscription first
+
+**Status:** Proposed · 2026-11-21 · grill · Refs #160 · refines ADR-15, ADR-18, ADR-23
+
+**Context:** Users want `claude` or `codex` to write the release notes for a
+`--release` run. `VERBUMP_RELEASE_NOTES_CMD` can already call
+`claude -p '…'`, but every user must then write the prompt and gather the
+commit context, and the command aborts the run (exit `1`) after the tag is
+already pushed when it fails. An LLM run fails more often than a local
+command does (login expiry, rate limits, outages, slow answers). ADR-15 says
+that a feature which generates content must be opt-in and
+dependency-isolated. Both CLIs can also bill an API key instead of the user's
+subscription when a key is set in the environment. Alternatives considered:
+a documented `VERBUMP_RELEASE_NOTES_CMD` recipe only (no shared prompt or
+context, no fallback); turning AI notes on whenever a logged-in CLI is found
+(breaks ADR-15); calling the provider HTTP APIs with `curl` (a new
+dependency and per-provider request code in bash); giving the agent
+read-only repo access (slower, costs more, harder to sandbox).
+
+**Decision:**
+
+- **Opt-in key `RELEASE_NOTES_AGENT`** (`.verbumprc` or env), default
+  `off`. `auto` tries `claude`, then `codex`; `claude` / `codex` pick one;
+  any other value is a command that reads the prompt on stdin. Detection
+  uses each CLI's own login-status command. `VERBUMP_RELEASE_NOTES_CMD`
+  keeps its behaviour and still takes precedence.
+- **Release notes only.** The changelog entry stays deterministic; no
+  agent output enters the bump commit or git history.
+- **Fixed context, no tools.** VerBump pipes the prompt plus the changelog
+  entry, the commit list and the diffstat since the previous tag. The agent
+  runs with tools off and no repo access, on its CLI's default model. The
+  built-in prompt is always used; `RELEASE_NOTES_PROMPT` appends
+  project-specific guidance.
+- **Subscription first.** When a subscription login exists, the provider's
+  API key is unset for the agent's process only. A key is used only when no
+  subscription login exists (e.g. CI).
+- **Never fatal.** A non-zero exit, a timeout (`RELEASE_NOTES_AGENT_TIMEOUT`,
+  default 120 s, enforced without coreutils `timeout`) or empty output falls
+  back, with a warning, to the notes the release publishes without an
+  agent: `gh --generate-notes` at whole-repo scope, the changelog entry
+  under a package scope. `auto` finding no agent prints one info line.
+- **Same slot as today.** The agent runs inside the `--release` publish
+  step, after the push. Its notes are printed in the run output; there is no
+  review prompt.
+- **Dry-run never calls the agent.** It reports which notes agent would run
+  (or that none was found) and the fallback; `--json` names it.
+
+**Consequences:** The default path and the default `--release` path are
+unchanged, so ADR-15 holds: `claude` / `codex` are conditional dependencies,
+probed only when the key is set. A release never fails or leaves a pushed
+tag without a release because of the notes agent. Unlike a custom
+`VERBUMP_RELEASE_NOTES_CMD`, a notes agent does not run in dry-run, so the
+dry-run preview of agent notes is the agent's name, not its text. The two
+notes knobs differ on purpose: the raw command aborts on failure, the notes
+agent falls back. The PRD §5.8 requirements, §9 dependency table and the
+config key list grow to match.

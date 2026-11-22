@@ -42,6 +42,7 @@ source "$MODULE_DIR/lib/git-checks.sh"
 source "$MODULE_DIR/lib/version.sh"
 source "$MODULE_DIR/lib/changelog.sh"
 source "$MODULE_DIR/lib/git-actions.sh"
+source "$MODULE_DIR/lib/notes-agent.sh"
 source "$MODULE_DIR/lib/hooks.sh"
 
 source "$MODULE_DIR/lib/config.sh"
@@ -60,6 +61,12 @@ FLAG_JSON=false # --json: with --dry-run, emit the release plan as one JSON obje
 # lib/config.sh): the package scope resolved from COMMIT_PATHS (R-MONO-1) —
 # active only when narrower than the repo root; scoped call sites check
 # VB_SCOPE_ACTIVE so whole-repo runs stay byte-identical.
+# RELEASE_NOTES_KIND / RELEASE_NOTES_TEXT / RELEASE_NOTES_ARGS (set by
+# resolve-release-notes in lib/git-actions.sh): the notes the --release step
+# publishes, or with --fallback the notes it publishes without a notes agent
+# (ADR-24).
+# NOTES_AGENT_OUTPUT / NOTES_AGENT_ERROR (set by run-notes-agent in
+# lib/notes-agent.sh): the notes agent's notes, or why it produced none.
 
 # Config-keyed defaults use `:=` so exported env values survive. An
 # unconditional assignment (e.g. `TAG_PREFIX="v"`) would clobber
@@ -73,6 +80,7 @@ FLAG_JSON=false # --json: with --dry-run, emit the release plan as one JSON obje
 : "${PUSH_DEST:=origin}"
 : "${CHANGELOG_STYLE:=flat}" # CHANGELOG.md style: flat (1.x-identical, default) | grouped
 : "${SOURCE_FILE:=package.json}" # Version source + primary bump target (R-SRC-1/5)
+: "${RELEASE_NOTES_AGENT:=off}" # Notes agent for --release notes: off | <command> (ADR-24)
 
 # Internal alias for the resolved version source. Everything downstream reads
 # VER_FILE; main() re-derives it from SOURCE_FILE once config + CLI are final.

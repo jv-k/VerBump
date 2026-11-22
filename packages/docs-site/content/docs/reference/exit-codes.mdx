@@ -9,11 +9,12 @@ branch on `$?`.
 | Code | Meaning |
 | ---: | --- |
 | `0` | Success. |
-| `1` | Generic runtime error (failed commit, jq write error, etc.). |
+| `1` | Generic runtime error (failed commit, failed push, jq write error, etc.). |
 | `2` | Usage / argument-parse error (unknown flag, missing value). |
 | `3` | Precondition failure (missing `git`/`jq`, dirty tree, disallowed branch, SemVer validation, insecure `.verbumprc`, branch/tag already exists). |
 | `4` | Hook failure: `PRE_BUMP_CMD` or `POST_TAG_CMD` exited non-zero (see [Release hooks](/docs/guides/hooks)). |
 | `5` | User abort (declined a prompt, e.g. push confirmation). |
 
 Every individual error — and the self-service hint printed with it — is
-catalogued in [Errors & hints](/docs/reference/errors).
+catalogued in [Errors & hints](/docs/reference/errors). For a release job
+that branches on these codes, see [Running in CI](/docs/guides/ci).

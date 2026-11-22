@@ -1,0 +1,184 @@
+---
+title: Running in CI
+description: Run VerBump as a release step in GitHub Actions or any other CI system, with no prompts.
+---
+
+VerBump is interactive by default: it asks you to confirm the version and the
+push. In CI nobody answers, so a release job makes those choices on the
+command line. It also needs a checkout that VerBump can read and push from.
+
+A release job needs five things:
+
+1. A full clone with tags.
+2. A named branch, not a detached HEAD.
+3. A git identity for the bump commit.
+4. A version choice: `--yes` for the suggested version, a bump level,
+   `--preid`, or `-v <version>`.
+5. A push choice: `-p <remote>`, or `--yes` to push to `origin`.
+
+## Answer every prompt up front
+
+| Prompt | When it appears | In CI |
+| --- | --- | --- |
+| Version | No `-v`, bump level, or `--preid` | Pass `--yes` to take the [suggested version](/docs/guides/version-suggestion), or force one with `--major` / `--minor` / `--patch`, `--preid <id>`, or `-v <version>`. |
+| Push | No `-p` and no `--pr` | Pass `-p <remote>`, or `--yes` to push to `origin` (or `PUSH_DEST` from `.verbumprc`). |
+| Changelog pause | `-l` or `FLAG_CHANGELOG_PAUSE=true` | Leave it off. Unset `FLAG_CHANGELOG_PAUSE` for CI runs if your `.verbumprc` sets it. |
+| Undo | `--undo` | Pass `--yes`. |
+
+`--yes` answers every prompt and never reads stdin. A
+[dry run](/docs/guides/dry-run-undo) never asks to push.
+
+## Prepare the checkout
+
+**Full history and tags.** The version suggestion, the changelog, and the
+"nothing to release" check all read the commits since the previous tag. A
+shallow clone hides them. In GitHub Actions, set `fetch-depth: 0` on
+`actions/checkout`.
+
+**A named branch.** With tag-in-place (the default), VerBump pushes the
+branch you are on. A detached HEAD has no branch to push, so the push fails
+with exit code `1`. When
+[`RELEASE_BRANCHES`](/docs/reference/configuration#release-branches) is set,
+VerBump refuses a detached HEAD earlier, with exit code `3`. In GitHub
+Actions, run the release from a `push` or `workflow_dispatch` event on a
+branch, not from `pull_request` or a tag push. Other systems can check out a
+detached HEAD. In that case, run `git checkout -B <branch>` before VerBump.
+
+**A git identity.** CI runners often have no `user.name` or `user.email`.
+Then git refuses the bump commit, and VerBump exits with code `1`. Set both
+before VerBump runs.
+
+**A clean working tree.** A step that changes tracked files before VerBump
+runs makes the clean-tree check fail with exit code `3`. Run VerBump before
+build steps that write to tracked files, or pass `--allow-dirty`.
+
+**Tests.** [`PRE_BUMP_CMD`](/docs/guides/hooks) runs in CI too. Keep it as the
+test gate, or pass `--no-hooks` when an earlier job already ran the tests.
+
+## GitHub Actions
+
+GitHub-hosted runners include `git`, `jq`, and `gh`. This workflow runs on
+demand and lets you pick the bump level:
+
+```yaml title=".github/workflows/release.yml"
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: Version bump
+        type: choice
+        options: [auto, patch, minor, major]
+        default: auto
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Set the git identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Install VerBump
+        run: npm install -g @jv-k/verbump
+
+      - name: Release
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BUMP: ${{ inputs.bump }}
+        run: |
+          if [ "$BUMP" = auto ]; then level=(); else level=("--$BUMP"); fi
+          version=$(verbump --quiet --yes "${level[@]}" -p origin --release)
+          if [ -z "$version" ]; then
+            echo "Nothing to release."
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+```
+
+`--yes` answers the prompts, and a bump level, when one is chosen, overrides
+the suggestion. `--quiet` prints only the new version on stdout, so later
+steps can read it as `steps.release.outputs.version`. It is empty when there
+was nothing to release. The `concurrency` group stops two releases from
+running at the same time.
+
+Pin the VerBump version you tested, for example
+`npm install -g @jv-k/verbump@<x.y.z>`, so that a new VerBump release cannot
+change your release job without review. The
+[install script](/docs/installation#install-script) also works, with
+`VERBUMP_INSTALL_VERSION` to pin the version.
+
+### Permissions and tokens
+
+| Feature | What the job needs |
+| --- | --- |
+| Push the commit and tag | `contents: write`. `actions/checkout` stores the job token, so `git push` uses it. |
+| `--release` | `contents: write`, and `GH_TOKEN` set for `gh`. |
+| `--pr` | `contents: write`, `pull-requests: write`, `GH_TOKEN`, and the repository setting **Allow GitHub Actions to create and approve pull requests**. |
+
+Branch protection applies to the job token. If the branch does not accept
+direct pushes, the push fails and the job fails with exit code `1`. Use
+`--pr` to open a release pull request instead, or check out with a token
+that is allowed to push.
+
+<Callout type="warn">
+  A push made with the default `GITHUB_TOKEN` does not start other workflows.
+  If a separate workflow publishes on tag push, it will not run for a tag that
+  VerBump pushed with that token. Publish in the same job after the release
+  step, or give `actions/checkout` a personal access token or a GitHub App
+  token.
+</Callout>
+
+## Read the result
+
+Every run ends with a [stable exit code](/docs/reference/exit-codes), so
+the job fails when the release fails:
+
+| Code | In CI, this usually means |
+| ---: | --- |
+| `0` | Released, or nothing to release. |
+| `1` | A git step failed: no git identity for the commit, or a rejected push. The commit and tag stay in the runner's clone, and the [error hint](/docs/reference/errors#commit-tag--push) prints the command that finishes the push. |
+| `2` | A flag is wrong. |
+| `3` | A precondition failed: a dirty tree, a disallowed branch, or a tag that already exists. |
+| `4` | `PRE_BUMP_CMD` or `POST_TAG_CMD` failed. |
+| `5` | A prompt was declined. With `--yes` or `-p`, this does not happen. |
+
+When there are no new commits since the previous tag, VerBump changes nothing
+and exits `0`. It prints a line that starts with `no-release` on stdout. With
+`--quiet`, stdout is empty instead. So a release job can run on every push to
+the main branch and skip a release when there is nothing new:
+
+```sh
+version=$(verbump --quiet --yes)
+if [ -z "$version" ]; then
+  echo "Nothing to release."
+fi
+```
+
+To show the planned release without changing anything, for example in a
+pull-request check, use a [JSON preview](/docs/guides/dry-run-undo#json-preview):
+
+```sh
+verbump --yes --dry-run --json > plan.json
+```
+
+## Other CI systems
+
+VerBump needs only `bash`, `git`, and `jq`, so it runs on any CI system. The
+rules above apply everywhere: a full clone with tags, a named branch, a git
+identity, a credential that may push, and `--yes` or the matching flags.
+`--release` and `--pr` use `gh` and work only with GitHub. See
+[Requirements](/docs/requirements).

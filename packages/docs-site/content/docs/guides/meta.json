@@ -8,6 +8,7 @@
     "monorepos",
     "hooks",
     "dry-run-undo",
+    "ci",
     "completions",
     "migrating"
   ]

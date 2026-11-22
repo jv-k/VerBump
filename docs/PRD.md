@@ -214,6 +214,9 @@ Each requirement has an ID so tests and PRs can reference it.
 | **R-REL-13** | A failing notes agent (non-zero exit, timeout (R-REL-15), empty or whitespace-only output) prints one warning naming the cause and publishes the notes the release publishes without an agent; the exit code stays `0`. |
 | **R-REL-14** | The notes agent never runs without `--release`, after a failed push, or under `--dry-run`. |
 | **R-REL-15** | `RELEASE_NOTES_AGENT_TIMEOUT` (default `120` seconds) caps the notes agent's run. On timeout VerBump stops the agent, warns naming the timeout and publishes the fallback notes with exit `0`, without coreutils `timeout`, and leaves no agent, timer or temporary file behind, also on interrupt. A value that is not a positive integer warns and uses `120`. |
+| **R-REL-16** | `RELEASE_NOTES_AGENT=claude` or `=codex` names a **built-in** notes agent, available when its executable is on `PATH` and its login-status command (`claude auth status`, `codex login status`) reports a login. Subscription first: the status check runs with the provider key (`ANTHROPIC_API_KEY` / `OPENAI_API_KEY`) unset, and a login means the agent runs with that key unset in its own process only; otherwise a set key runs the agent with the key; otherwise the agent is not available. Detection never prints account details. |
+| **R-REL-17** | A built-in agent runs non-interactively with tools off and no saved session (`codex` also in a read-only sandbox with no git-repo check). Only its final message becomes the notes. An info line names the agent and the auth mode, e.g. `Notes agent: claude (subscription)`. |
+| **R-REL-18** | A built-in agent that is not installed, or neither logged in nor given a key, prints one warning and publishes the fallback notes (R-REL-13); it never exits `3`. A custom command keeps the caller's environment. |
 
 ### 5.9 Developer harness
 

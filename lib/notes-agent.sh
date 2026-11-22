@@ -88,6 +88,13 @@ _NOTES_AGENT_TIMEOUT_S=""
 _NOTES_AGENT_PID=""
 _NOTES_TIMER_PID=""
 _NOTES_AGENT_TMP=()
+# The run's scratch directory (prompt, output), outside the agent's own
+# empty directory; the codex adapter writes its final message there.
+_NOTES_AGENT_SCRATCH=""
+# Set by _resolve-notes-builtin for a built-in agent: the auth mode the info
+# line names and the command that runs the agent.
+_NOTES_AGENT_AUTH=""
+_NOTES_AGENT_CMD=""
 
 # Set _NOTES_AGENT_TIMEOUT_S to RELEASE_NOTES_AGENT_TIMEOUT when it is a
 # positive integer; otherwise warn and use the default. Leading zeros are
@@ -120,7 +127,7 @@ _notes-agent-cleanup() {
     wait "$_NOTES_AGENT_PID" 2>/dev/null
   fi
   [ "${#_NOTES_AGENT_TMP[@]}" -gt 0 ] && rm -rf "${_NOTES_AGENT_TMP[@]}"
-  _NOTES_AGENT_PID="" _NOTES_TIMER_PID="" _NOTES_AGENT_TMP=()
+  _NOTES_AGENT_PID="" _NOTES_TIMER_PID="" _NOTES_AGENT_TMP=() _NOTES_AGENT_SCRATCH=""
 }
 
 # INT / TERM while the agent runs: the agent and the timer sit in their own
@@ -134,14 +141,95 @@ _notes-agent-interrupt() {
   exit "$2"
 }
 
-# Run the notes agent <cmd> on the built prompt. The command is eval'd, like
+# ── Built-in notes agents (R-REL-16..18) ─────────────────────────────────────
+# RELEASE_NOTES_AGENT=claude or =codex names a built-in agent: VerBump knows
+# its flags, how to read its final message, and how to tell whether it bills
+# a subscription or an API key. Any other value is a custom command, run
+# as-is with the caller's environment.
+
+# The provider API key a built-in agent's CLI bills when it is set.
+_notes-builtin-key-var() {
+  case $1 in
+    claude) printf 'ANTHROPIC_API_KEY' ;;
+    codex)  printf 'OPENAI_API_KEY' ;;
+  esac
+}
+
+# Succeed when <agent>'s login-status command reports a login. All of its
+# output is discarded: claude's JSON is read only for its loggedIn field,
+# codex's status only by its exit code, so no account email or org name can
+# reach the run output.
+_notes-builtin-logged-in() {
+  case $1 in
+    claude) claude auth status --json 2>/dev/null | jq -e '.loggedIn == true' >/dev/null 2>&1 ;;
+    codex)  codex login status >/dev/null 2>&1 ;;
+  esac
+}
+
+# Decide how the built-in <agent> runs. The status check runs first with the
+# provider key unset, in a subshell: a login then means a subscription, and
+# the agent runs with the key unset in its own process only, so the
+# subscription is billed, not the key. Otherwise a set key runs the agent
+# with the key (CI). Sets _NOTES_AGENT_AUTH to "subscription" or "API key"
+# and _NOTES_AGENT_CMD to the command to eval; or, when the agent is not
+# installed or has neither, sets NOTES_AGENT_ERROR and returns 1 (a warning
+# and the fallback, never exit 3).
+_resolve-notes-builtin() {
+  local agent=$1 key_var
+  key_var=$(_notes-builtin-key-var "$agent")
+  if ! command -v "$agent" >/dev/null 2>&1; then
+    NOTES_AGENT_ERROR="is not installed (no '${agent}' on PATH)"
+    return 1
+  fi
+  if ( unset "$key_var"; _notes-builtin-logged-in "$agent" ); then
+    _NOTES_AGENT_AUTH="subscription"
+    _NOTES_AGENT_CMD="unset ${key_var}; _notes-agent-${agent}"
+  elif [ -n "${!key_var-}" ]; then
+    _NOTES_AGENT_AUTH="API key"
+    _NOTES_AGENT_CMD="_notes-agent-${agent}"
+  else
+    NOTES_AGENT_ERROR="is not logged in and ${key_var} is not set"
+    return 1
+  fi
+}
+
+# Run claude on the prompt (stdin): print mode, no built-in tools, no MCP
+# servers (--strict-mcp-config with no --mcp-config), no saved session.
+# Its stdout carries one JSON object per line next to anything else it
+# prints, so only the result field of the "result" object is kept — the
+# final message, never the progress.
+_notes-agent-claude() {
+  local out
+  out=$(claude -p --output-format json --tools '' --strict-mcp-config \
+    --no-session-persistence) || return
+  printf '%s\n' "$out" \
+    | jq -R -r 'fromjson? | select(type == "object" and .type == "result") | .result // empty'
+}
+
+# Run codex on the prompt (stdin): exec mode in a read-only sandbox, outside
+# a git repo, with no shell or web-search tool, without the user's
+# config.toml (so none of its MCP servers) and no saved session. codex
+# writes its final message to the --output-last-message file; its stdout
+# (progress, then that message again) is discarded.
+_notes-agent-codex() {
+  local last="${_NOTES_AGENT_SCRATCH}/codex-last-message"
+  codex exec --sandbox read-only --skip-git-repo-check --ephemeral --ignore-user-config \
+    --disable shell_tool -c 'web_search="disabled"' \
+    --output-last-message "$last" - >/dev/null || return
+  cat "$last"
+}
+
+# Run the notes agent <cmd> on the built prompt. A built-in name (claude,
+# codex) runs that CLI as _resolve-notes-builtin decides, after an info line
+# that names the agent and the auth mode. Any other value is eval'd, like
 # VERBUMP_RELEASE_NOTES_CMD, so a value such as 'gemini -p' or
 # 'llm -m mymodel' splits into its arguments. It reads the prompt on stdin and
 # runs in a fresh empty temporary directory, so it has no repo to read or
 # change. Its stderr is discarded: an agent CLI's progress chatter is not run
-# output. On success, sets NOTES_AGENT_OUTPUT and returns 0. On a non-zero
-# exit, a timeout, or empty or whitespace-only output, sets NOTES_AGENT_ERROR
-# to the cause and returns 1; the caller warns and falls back.
+# output. On success, sets NOTES_AGENT_OUTPUT and returns 0. When a built-in
+# agent cannot run, or on a non-zero exit, a timeout, or empty or
+# whitespace-only output, sets NOTES_AGENT_ERROR to the cause and returns 1;
+# the caller warns and falls back.
 #
 # Watchdog (R-REL-15): macOS has no coreutils `timeout`, so the agent runs in
 # the background and a background timer stops it after
@@ -159,6 +247,14 @@ run-notes-agent() {
   NOTES_AGENT_OUTPUT="" NOTES_AGENT_ERROR=""
   _resolve-notes-agent-timeout
 
+  case $cmd in
+    claude|codex)
+      _resolve-notes-builtin "$cmd" || return 1
+      log_info "Notes agent: ${S_VAL-}${cmd}${RESET-} (${_NOTES_AGENT_AUTH})"
+      cmd=$_NOTES_AGENT_CMD
+      ;;
+  esac
+
   # Prompt and output live outside the agent's directory, so it starts empty.
   scratch=$(mktemp -d) || { NOTES_AGENT_ERROR="could not start (mktemp failed)"; return 1; }
   workdir=$(mktemp -d) || {
@@ -167,6 +263,7 @@ run-notes-agent() {
     return 1
   }
   _NOTES_AGENT_TMP=("$scratch" "$workdir")
+  _NOTES_AGENT_SCRATCH=$scratch
   saved_traps=$(trap -p INT TERM)
   trap '_notes-agent-interrupt INT 130' INT
   trap '_notes-agent-interrupt TERM 143' TERM

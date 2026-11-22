@@ -9,44 +9,7 @@
 # its argv, then resolve the fallback in the same repo and compare.
 
 load 'test_helper'
-
-# gh shim: `auth status` succeeds; every other call writes each argument to
-# its own file under $GH_ARGV_DIR (1, 2, …) so multi-line notes survive
-# intact. Prints the shim's directory; the caller prepends it to PATH and
-# registers its cleanup, because a CLEANUP_CMDS entry made here is lost in the
-# caller's $(...) subshell.
-gh_argv_shim() {
-  local shim
-  shim=$(mktemp -d)
-  mkdir -p "${shim}/argv"
-  cat > "${shim}/gh" <<'SH'
-#!/bin/sh
-[ "$1" = "auth" ] && exit 0
-i=0
-for a in "$@"; do
-  i=$((i + 1))
-  printf '%s' "$a" > "${GH_ARGV_DIR}/${i}"
-done
-echo "https://github.com/acme/repo/releases/tag/shim"
-exit 0
-SH
-  chmod +x "${shim}/gh"
-  printf '%s' "$shim"
-}
-
-# Assert the argv the gh shim recorded equals the arguments given, one by one.
-assert_gh_argv() {
-  local dir="$1" i=0 want got
-  shift
-  for want in "$@"; do
-    i=$((i + 1))
-    [ -f "${dir}/${i}" ] || bats_fail "gh argv has no argument ${i} (wanted '${want}')"
-    got=$(cat "${dir}/${i}"; printf x)
-    got="${got%x}"
-    assert_equal "$got" "$want"
-  done
-  [ ! -f "${dir}/$((i + 1))" ] || bats_fail "gh argv has more than ${i} arguments"
-}
+load 'release_notes_helper'
 
 @test "release notes: fallback matches what a live --release publishes at whole-repo scope (#161)" {
   local remote shim

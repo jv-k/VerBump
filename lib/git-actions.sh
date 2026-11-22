@@ -271,27 +271,43 @@ check-pr-deps() {
 
 # Resolve the notes the --release step publishes — the one place that picks
 # the notes source (R-MONO-9, ADR-24). Sets, for the caller to consume:
-#   RELEASE_NOTES_KIND       "command" | "changelog" | "generated" (the --json
-#                            `notes` value)
+#   RELEASE_NOTES_KIND       "command" | "agent" | "changelog" | "generated"
+#                            (the --json `notes` value; never "agent" there,
+#                            because dry-run never runs the agent)
 #   RELEASE_NOTES_TEXT       the notes body; empty when gh generates it
 #   RELEASE_NOTES_ARGS       the matching `gh release create` notes flags
 # Sources, in precedence order: a custom $VERBUMP_RELEASE_NOTES_CMD beats
-# everything; under a package scope the package's own changelog entry via
+# everything; then the notes agent named by RELEASE_NOTES_AGENT (live runs
+# only, R-REL-10); under a package scope the package's own changelog entry via
 # render-release-notes (gh's generator can't path-scope — it would list
 # foreign packages' PRs); otherwise gh --generate-notes, anchored to this tag
 # series' previous tag so GitHub can't auto-pick a baseline from another
 # series (amends ADR-18).
-# With --fallback, skip the custom command and resolve only the notes a release
-# publishes without a notes agent (ADR-24), so a notes-agent branch can fall
-# back to them. A custom command runs in dry-run too, so the preview reflects
+# With --fallback, skip the custom command and the agent and resolve only the
+# notes a release publishes without a notes agent (ADR-24). A notes agent that
+# fails prints one warning naming the cause and falls through to those notes
+# (R-REL-13). A custom command runs in dry-run too, so the preview reflects
 # real output (R-REL-5). If it exits non-zero, fail 1 with its stderr; the tag
 # push already happened and is intentionally NOT rolled back (R-REL-6). Call it
 # directly, never in $(...): the results are globals and `fail` must exit.
 resolve-release-notes() {
   local notes_cmd="${VERBUMP_RELEASE_NOTES_CMD:-}"
-  [ "${1-}" = --fallback ] && notes_cmd=""
+  local agent="${RELEASE_NOTES_AGENT:-off}"
+  [ "${1-}" = --fallback ] && notes_cmd="" agent=off
+  # Dry-run never calls the agent (ADR-24): a preview spends no tokens.
+  [ "${FLAG_DRYRUN:-false}" = true ] && agent=off
   RELEASE_NOTES_KIND="" RELEASE_NOTES_TEXT=""
   RELEASE_NOTES_ARGS=()
+
+  if [ -z "$notes_cmd" ] && [ "$agent" != off ]; then
+    if run-notes-agent "$agent"; then
+      RELEASE_NOTES_KIND="agent"
+      RELEASE_NOTES_TEXT="$NOTES_AGENT_OUTPUT"
+      RELEASE_NOTES_ARGS=(--notes "$RELEASE_NOTES_TEXT")
+      return 0
+    fi
+    log_warn "Notes agent '${S_VAL-}${agent}${RESET-}' ${NOTES_AGENT_ERROR} — publishing the release notes this release has without a notes agent."
+  fi
 
   if [ -n "$notes_cmd" ]; then
     # Capture stdout (notes) and stderr separately so a failure can surface a
@@ -368,6 +384,13 @@ do-github-release() {
     echo -e "${S_LIGHT}[dry-run]${RESET} would run: gh release create ${S_VAL}${tag}${RESET} ${pre_flag:+${pre_flag} }${notes_preview}" >&2
     log_success "(dry-run) GitHub release prepared for ${S_VAL}${tag}${RESET}"
     return
+  fi
+
+  # Agent notes are printed before they are published (R-REL-12): no review
+  # prompt, so the run output is where the maintainer reads them.
+  if [ "$RELEASE_NOTES_KIND" = agent ]; then
+    log_info "Release notes written by notes agent '${S_VAL-}${RELEASE_NOTES_AGENT}${RESET-}':"
+    printf '%s\n' "$RELEASE_NOTES_TEXT"
   fi
 
   local gh_msg gh_rc

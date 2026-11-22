@@ -208,6 +208,11 @@ Each requirement has an ID so tests and PRs can reference it.
 | **R-REL-4** | `gh` is a **conditional** dependency: required only when `--release` is used (missing → exit `3`). A custom `VERBUMP_RELEASE_NOTES_CMD` may add further deps (e.g. `node`/`npx`), required only when it is set. R-DEP-1/2 still hold for the default path: calls without `--release` must not invoke `gh`, `node`, or `npx`. |
 | **R-REL-5** | Under `--dry-run`, no `gh` call is made and no release is published. The resolved `gh release create` invocation is printed to stderr with the `[dry-run]` prefix, including the tag and the notes source (`--generate-notes` by default, or `--notes '<output>'` for a custom command). A custom notes command MAY still run (it is expected to be read-only) so the preview reflects real output; the default path runs nothing. |
 | **R-REL-6** | If the notes command exits non-zero, `--release` aborts before calling `gh` and exits `1` with the captured stderr surfaced to the user. The tag push is not rolled back. |
+| **R-REL-10** | `RELEASE_NOTES_AGENT` (default `off`) names a **notes agent**, a command that reads a prompt on stdin. On a live `--release` run, after the push, its stdout is published via `--notes`. `off` changes nothing; `VERBUMP_RELEASE_NOTES_CMD` takes precedence and keeps R-REL-6 (ADR-24). |
+| **R-REL-11** | The agent's stdin is the built-in prompt, then `RELEASE_NOTES_PROMPT`, then delimited context — the grouped changelog entry, the commit list (subject and body) and the diffstat for the previous tag → new tag range (full history with no previous tag), restricted to the package scope. The commit list and diffstat are line-limited, with a marker line when cut. |
+| **R-REL-12** | The agent runs in a fresh empty temporary directory. On success VerBump prints an info line naming the agent, then the notes, on the progress channel (stderr under `--quiet`). |
+| **R-REL-13** | A failing notes agent (non-zero exit, empty or whitespace-only output) prints one warning naming the cause and publishes the notes the release publishes without an agent; the exit code stays `0`. |
+| **R-REL-14** | The notes agent never runs without `--release`, after a failed push, or under `--dry-run`. |
 
 ### 5.9 Developer harness
 
@@ -222,7 +227,7 @@ Each requirement has an ID so tests and PRs can reference it.
 | ID | Requirement |
 | --- | --- |
 | **R-CFG-1** | `.verbumprc` is discovered by walking up from `$PWD` to `/`. First match wins; absence is not an error. |
-| **R-CFG-2** | Supported keys: `TAG_PREFIX`, `REL_PREFIX`, `PUSH_DEST`, `COMMIT_MSG_PREFIX`, `COMMIT_MSG_TEMPLATE`, `FLAG_BRANCH`, `PR_BASE`, `CHANGELOG_STYLE`, `FLAG_NOCHANGELOG`, `FLAG_CHANGELOG_PAUSE`, `ALLOW_DIRTY`, `NO_FETCH`, `RELEASE_BRANCHES`, `TAG_SIGN`, `SOURCE_FILE`, `BUMP_FILES`, `PRE_BUMP_CMD`, `POST_TAG_CMD`, plus deprecated `FLAG_NOBRANCH` (back-compat; superseded by `FLAG_BRANCH`). Only these participate in the precedence contract (R-CFG-3); other assignments in the file execute as plain shell (R-CFG-5) but are unsupported, warn (R-CFG-7), and carry no precedence or compatibility guarantee. |
+| **R-CFG-2** | Supported keys: `TAG_PREFIX`, `REL_PREFIX`, `PUSH_DEST`, `COMMIT_MSG_PREFIX`, `COMMIT_MSG_TEMPLATE`, `FLAG_BRANCH`, `PR_BASE`, `CHANGELOG_STYLE`, `FLAG_NOCHANGELOG`, `FLAG_CHANGELOG_PAUSE`, `ALLOW_DIRTY`, `NO_FETCH`, `RELEASE_BRANCHES`, `TAG_SIGN`, `SOURCE_FILE`, `BUMP_FILES`, `PRE_BUMP_CMD`, `POST_TAG_CMD`, `RELEASE_NOTES_AGENT`, `RELEASE_NOTES_PROMPT`, plus deprecated `FLAG_NOBRANCH` (back-compat; superseded by `FLAG_BRANCH`). Only these participate in the precedence contract (R-CFG-3); other assignments in the file execute as plain shell (R-CFG-5) but are unsupported, warn (R-CFG-7), and carry no precedence or compatibility guarantee. |
 | **R-CFG-3** | Precedence end-to-end: CLI > environment > `.verbumprc` > built-in default. |
 | **R-CFG-4** | `.verbumprc` is refused (exit `3`) if world-writable, group-writable, or not owned by the invoking user. |
 | **R-CFG-5** | `.verbumprc` is shell-sourced, not parsed. Failures in sourcing exit `3` with the shell error as context. |

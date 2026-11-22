@@ -60,10 +60,10 @@ FLAG_JSON=false # --json: with --dry-run, emit the release plan as one JSON obje
 # lib/config.sh): the package scope resolved from COMMIT_PATHS (R-MONO-1) —
 # active only when narrower than the repo root; scoped call sites check
 # VB_SCOPE_ACTIVE so whole-repo runs stay byte-identical.
-# RELEASE_NOTES_KIND / RELEASE_NOTES_TEXT / RELEASE_NOTES_START_TAG /
-# RELEASE_NOTES_ARGS (set by resolve-release-notes in lib/git-actions.sh): the
-# notes the --release step publishes, or with --fallback the notes it publishes
-# without a notes agent (ADR-24).
+# RELEASE_NOTES_KIND / RELEASE_NOTES_TEXT / RELEASE_NOTES_ARGS (set by
+# resolve-release-notes in lib/git-actions.sh): the notes the --release step
+# publishes, or with --fallback the notes it publishes without a notes agent
+# (ADR-24).
 
 # Config-keyed defaults use `:=` so exported env values survive. An
 # unconditional assignment (e.g. `TAG_PREFIX="v"`) would clobber

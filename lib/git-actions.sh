@@ -274,7 +274,6 @@ check-pr-deps() {
 #   RELEASE_NOTES_KIND       "command" | "changelog" | "generated" (the --json
 #                            `notes` value)
 #   RELEASE_NOTES_TEXT       the notes body; empty when gh generates it
-#   RELEASE_NOTES_START_TAG  the --notes-start-tag anchor; empty if none
 #   RELEASE_NOTES_ARGS       the matching `gh release create` notes flags
 # Sources, in precedence order: a custom $VERBUMP_RELEASE_NOTES_CMD beats
 # everything; under a package scope the package's own changelog entry via
@@ -291,7 +290,7 @@ check-pr-deps() {
 resolve-release-notes() {
   local notes_cmd="${VERBUMP_RELEASE_NOTES_CMD:-}"
   [ "${1-}" = --fallback ] && notes_cmd=""
-  RELEASE_NOTES_KIND="" RELEASE_NOTES_TEXT="" RELEASE_NOTES_START_TAG=""
+  RELEASE_NOTES_KIND="" RELEASE_NOTES_TEXT=""
   RELEASE_NOTES_ARGS=()
 
   if [ -n "$notes_cmd" ]; then
@@ -321,8 +320,7 @@ resolve-release-notes() {
     RELEASE_NOTES_ARGS=(--generate-notes)
     if [ -n "${V_PREV:-}" ] \
        && git rev-parse --verify --quiet "refs/tags/${TAG_PREFIX}${V_PREV}" >/dev/null; then
-      RELEASE_NOTES_START_TAG="${TAG_PREFIX}${V_PREV}"
-      RELEASE_NOTES_ARGS+=(--notes-start-tag "$RELEASE_NOTES_START_TAG")
+      RELEASE_NOTES_ARGS+=(--notes-start-tag "${TAG_PREFIX}${V_PREV}")
     fi
   fi
 }
@@ -355,9 +353,8 @@ do-github-release() {
   resolve-release-notes
 
   if [ "${FLAG_DRYRUN:-false}" = true ]; then
-    # notes: "generated" (gh --generate-notes) vs "changelog" (the scoped
-    # package entry) vs "command" (a custom VERBUMP_RELEASE_NOTES_CMD ran).
-    # prerelease is a real boolean.
+    # notes: RELEASE_NOTES_KIND (see resolve-release-notes); prerelease is a
+    # real boolean.
     if [ "${FLAG_JSON:-false}" = true ]; then
       record-effect-raw "$(jq -nc \
         --arg tag "$tag" \
@@ -365,7 +362,8 @@ do-github-release() {
         --argjson prerelease "$([ -n "$pre_flag" ] && echo true || echo false)" \
         '{action:"github-release", tag:$tag, notes:$notes, prerelease:$prerelease}')"
     fi
-    local notes_preview="--generate-notes${RELEASE_NOTES_START_TAG:+ --notes-start-tag ${RELEASE_NOTES_START_TAG}}"
+    # The generated flags print as-is; a notes body prints quoted.
+    local notes_preview="${RELEASE_NOTES_ARGS[*]}"
     [ "$RELEASE_NOTES_KIND" != "generated" ] && notes_preview="--notes '${RELEASE_NOTES_TEXT}'"
     echo -e "${S_LIGHT}[dry-run]${RESET} would run: gh release create ${S_VAL}${tag}${RESET} ${pre_flag:+${pre_flag} }${notes_preview}" >&2
     log_success "(dry-run) GitHub release prepared for ${S_VAL}${tag}${RESET}"

@@ -95,7 +95,9 @@ packages' PRs). Instead the release notes are **the package's own changelog
 entry** in the grouped style — sections, commit links, and a compare link —
 regardless of your `CHANGELOG_STYLE`, and even when you skip the changelog
 write with `-c`. A custom `VERBUMP_RELEASE_NOTES_CMD` still overrides
-everything.
+everything. A [notes agent](/docs/guides/release-notes) writes the notes
+from the package's changes only, and when it fails, the package's changelog
+entry is the fallback.
 
 Two GitHub-side caveats worth knowing:
 

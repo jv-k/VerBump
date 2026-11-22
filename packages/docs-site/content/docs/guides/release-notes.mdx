@@ -1,0 +1,223 @@
+---
+title: AI-written release notes
+description: Let claude, codex or another LLM write the notes for a --release run, with a safe fallback.
+---
+
+With [`--release`](/docs/reference/cli#push-branch--publish), VerBump
+publishes a GitHub release for the new tag. By default the notes come from
+GitHub's generator (`gh release create --generate-notes`). Set
+`RELEASE_NOTES_AGENT` and a **notes agent**, an LLM command line tool, writes
+them instead. VerBump gives it a fixed prompt and the release's context, then
+publishes what it returns.
+
+The notes agent is opt-in and never fatal. If it is not available, fails,
+times out or returns nothing, VerBump publishes the notes it would publish
+without an agent, and the run still exits `0`.
+
+## Setup
+
+Add one line to your `.verbumprc` (or set it in the environment):
+
+```sh title=".verbumprc"
+RELEASE_NOTES_AGENT=auto
+```
+
+Then release as usual:
+
+```sh
+verbump --release -p origin
+```
+
+`auto` uses [Claude Code](https://docs.claude.com/en/docs/claude-code)
+(`claude`) or the [Codex CLI](https://github.com/openai/codex) (`codex`),
+whichever is installed and logged in. Install one of them and log in to it
+once. VerBump needs no other setup.
+
+## Keys
+
+| Key | Values | Default |
+| --- | --- | --- |
+| `RELEASE_NOTES_AGENT` | `off`, `auto`, `claude`, `codex`, or a [custom command](#custom-commands) | `off` |
+| `RELEASE_NOTES_PROMPT` | Text that VerBump adds after its built-in prompt | *unset* (no extra guidance) |
+| `RELEASE_NOTES_AGENT_TIMEOUT` | Seconds the agent may run before VerBump stops it | `120` |
+
+Set them in `.verbumprc` or the environment. The environment wins over the
+file. There are no CLI flags for them, and none of them turns on a release:
+only `--release` does.
+
+```sh title=".verbumprc"
+RELEASE_NOTES_AGENT=auto
+RELEASE_NOTES_PROMPT='Group the notes under Features, Fixes and Other.
+Write one short sentence for each change.'
+RELEASE_NOTES_AGENT_TIMEOUT=180
+```
+
+`.verbumprc` is shell-sourced, so quote any value that has spaces. Single
+quotes keep `$` and backticks literal.
+
+## What the agent sees
+
+The agent reads one prompt on stdin, and its stdout becomes the notes. The
+prompt has three parts, in this order:
+
+1. **The built-in prompt.** It asks for Markdown release notes for the
+   project's users, from the facts in the context only, with every `#N`
+   issue and pull request reference kept, no title or version heading, and
+   no preamble.
+2. **Your guidance**, from `RELEASE_NOTES_PROMPT`. It adds to the built-in
+   prompt and never replaces it.
+3. **The context**, from the previous tag to the new one (the full history
+   when there is no previous tag): the changelog entry, the commit list with
+   subjects and bodies, and the diffstat. VerBump cuts the commit list at 400
+   lines and the diffstat at 200 lines, and adds a line that says what it
+   cut. In a [monorepo package](/docs/guides/monorepos), every part covers
+   only that package.
+
+The agent runs in a new empty temporary directory, not in your repository, so
+it cannot read or change your files. VerBump discards its stderr. After the
+push, VerBump prints the notes in the run output, then publishes them. There
+is no review prompt, so read them there. Under `--quiet` they go to stderr,
+and stdout keeps only the version.
+
+## Built-in agents and `auto`
+
+| Value | Agent |
+| --- | --- |
+| `claude` | Claude Code, run as `claude -p` with no tools, no MCP servers and no saved session |
+| `codex` | Codex CLI, run as `codex exec` in a read-only sandbox, with no shell or web search tool, without your `config.toml` and with no saved session |
+| `auto` | `claude` if it is available, else `codex` |
+
+A built-in agent is **available** when its executable is on `PATH` and it is
+logged in, or when its provider API key is set. Both agents use their CLI's
+default model. To choose a model, use a [custom command](#custom-commands).
+
+`auto` tries `claude` first, then `codex`. It passes over an agent that is not
+available without a warning. When neither is available, it prints one info
+line and publishes the fallback notes:
+
+```text
+No notes agent found (RELEASE_NOTES_AGENT=auto) — publishing the release notes this release has without a notes agent.
+```
+
+When you name an agent (`claude` or `codex`) and it is not available, VerBump
+prints a warning instead, and publishes the fallback notes.
+
+### Subscription first
+
+Both CLIs can bill your subscription or an API key. VerBump prefers the
+subscription:
+
+1. It runs the CLI's login check (`claude auth status`, `codex login status`)
+   with the API key (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`) unset.
+2. If the CLI is logged in, the agent runs with the key unset, so the
+   subscription pays. VerBump unsets the key only in the agent's own process.
+   Your shell and the rest of the run keep it.
+3. If the CLI is not logged in and the key is set, the agent runs with the
+   key. This is the usual case in CI.
+4. If neither is true, the agent is not available.
+
+An info line names the agent and how it pays:
+
+```text
+Notes agent: claude (subscription)
+```
+
+The login check reads only whether you are logged in. VerBump never prints
+your account email or organisation name.
+
+## Fallback
+
+The **fallback notes** are the notes the release would publish without a
+notes agent:
+
+- for a whole-repository release, GitHub's generated notes
+  (`--generate-notes`), from the previous tag of the same tag series;
+- for a [monorepo package](/docs/guides/monorepos#github-releases-in-a-monorepo),
+  the package's own changelog entry.
+
+VerBump prints one warning that names the cause, publishes the fallback notes
+and exits `0` when the agent:
+
+- is a built-in agent that is not installed, or not logged in with no API key
+  set;
+- exits with a non-zero code;
+- runs longer than the timeout;
+- returns empty or whitespace-only output.
+
+```text
+Notes agent 'claude' exited 1 — publishing the release notes this release has without a notes agent.
+```
+
+When `auto` picked an agent and that agent fails, VerBump falls back. It does
+not try the other agent.
+
+The agent runs only on a `--release` run, after the tag push. A failed push
+ends the run before the agent starts.
+
+### Timeout
+
+`RELEASE_NOTES_AGENT_TIMEOUT` (default `120`) is the number of seconds the
+agent may run. When the time is up, VerBump stops the agent and every process
+it started (`TERM`, then `KILL` 2 seconds later), prints a warning that names
+the timeout, and publishes the fallback notes. Ctrl-C during the agent's run
+also stops it and removes its temporary files. The timeout needs no
+`timeout` command, so it works with the bash that ships with macOS.
+
+A value that is not a positive integer prints a warning when the agent runs,
+and VerBump uses `120`.
+
+## Custom commands
+
+Any other value of `RELEASE_NOTES_AGENT` is a command. VerBump runs it as a
+shell command line in the empty temporary directory, writes the prompt to its
+stdin and takes its stdout as the notes. The same timeout and fallback rules
+apply. Use this for other LLMs, local models, or to pin a model:
+
+```sh title=".verbumprc"
+# Simon Willison's llm, with a pinned model
+RELEASE_NOTES_AGENT='llm -m gpt-4o-mini'
+
+# A local model through Ollama
+RELEASE_NOTES_AGENT='ollama run llama3.2'
+
+# Claude Code on a pinned model, with tools off
+RELEASE_NOTES_AGENT="env -u ANTHROPIC_API_KEY claude -p --model sonnet --tools ''"
+```
+
+VerBump runs a custom command with your environment unchanged. It does not
+apply the subscription-first rule, so a command that reads an API key from
+the environment bills that key. The last example unsets the key itself to
+keep the subscription.
+
+## Dry run
+
+`--release --dry-run` picks the notes agent but never runs it, so a preview
+spends no tokens. The login checks of the built-in agents can still run. The
+`[dry-run]` line names the agent, how it pays (`custom command` for a custom
+command), the `gh` command it would feed, and the fallback:
+
+```text
+[dry-run] notes agent: claude (subscription) — would run: gh release create v1.3.0 --notes '<notes from claude>'; fallback: gh release create v1.3.0 --generate-notes --notes-start-tag v1.2.0
+```
+
+When no agent is available, the line says so:
+
+```text
+[dry-run] no notes agent found (RELEASE_NOTES_AGENT=auto) — would run: gh release create v1.3.0 --generate-notes --notes-start-tag v1.2.0
+```
+
+With [`--json`](/docs/guides/dry-run-undo#json-preview), the `github-release`
+effect has `"notes": "agent"` when an agent would run, `agent` (the agent's
+name, or `null`) and `fallback` (`generated` or `changelog`):
+
+```json
+{"action":"github-release","tag":"v1.3.0","notes":"agent","prerelease":false,"agent":"claude","fallback":"generated"}
+```
+
+## `VERBUMP_RELEASE_NOTES_CMD`
+
+The older `VERBUMP_RELEASE_NOTES_CMD` environment variable still works and
+wins over `RELEASE_NOTES_AGENT`. It differs in two ways: it gets no prompt or
+context, and when it fails the run stops with exit `1`, after the tag push.
+A notes agent falls back instead. A custom notes command also runs during a
+dry run, so the preview shows its real output.

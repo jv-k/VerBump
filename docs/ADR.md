@@ -571,7 +571,7 @@ unchanged.
 
 ## ADR-24 — Notes agent writes `--release` notes; opt-in, never fatal, subscription first
 
-**Status:** Proposed · 2026-11-21 · grill · Refs #160 · refines ADR-15, ADR-18, ADR-23
+**Status:** Accepted · 2026-11-21 · grill · Refs #160 · refines ADR-15, ADR-18, ADR-23
 
 **Context:** Users want `claude` or `codex` to write the release notes for a
 `--release` run. `VERBUMP_RELEASE_NOTES_CMD` can already call

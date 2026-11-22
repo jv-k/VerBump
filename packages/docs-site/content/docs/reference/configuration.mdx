@@ -33,6 +33,9 @@ Every key maps 1:1 to an existing global:
 | `PRE_BUMP_CMD` | *(no flag, see [Release hooks](/docs/guides/hooks))* | *unset* (no hook) |
 | `POST_TAG_CMD` | *(no flag, see [Release hooks](/docs/guides/hooks))* | *unset* (no hook) |
 | `COMMIT_PATHS` | *(no flag, see [Monorepos](/docs/guides/monorepos))* | `.` (this rc's directory — repo root = whole repo) |
+| `RELEASE_NOTES_AGENT` | *(no flag, see [AI-written release notes](/docs/guides/release-notes))* | `off` (`auto`, `claude`, `codex`, or a command) |
+| `RELEASE_NOTES_PROMPT` | *(no flag, see [AI-written release notes](/docs/guides/release-notes))* | *unset* (built-in prompt only) |
+| `RELEASE_NOTES_AGENT_TIMEOUT` | *(no flag, see [AI-written release notes](/docs/guides/release-notes#timeout))* | `120` (seconds) |
 
 ```sh
 # .verbumprc — committed at repo root
@@ -42,6 +45,7 @@ PUSH_DEST="upstream"
 COMMIT_MSG_PREFIX="release: "
 FLAG_NOCHANGELOG=true
 RELEASE_BRANCHES="main develop release/*"
+RELEASE_NOTES_AGENT=auto
 ```
 
 ## Release branches

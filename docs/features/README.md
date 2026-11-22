@@ -23,7 +23,7 @@ contract); IDs added after the PRD are backfilled here first.
 | [commit-template](./commit-template/requirements.md) | R-TPL | `commit-template.bats` |
 | [release-flow](./release-flow/requirements.md) | R-FLOW | `git-ops.bats`, `pr.bats`, `prefixes.bats`, `e2e-live.bats` |
 | [signed-tags](./signed-tags/requirements.md) | R-SIGN | `signed-tags.bats`, `args.bats` |
-| [github-release](./github-release/requirements.md) | R-REL | `release.bats` |
+| [github-release](./github-release/requirements.md) | R-REL | `release.bats`, `release-notes.bats`, `notes-agent-timeout.bats`, `notes-agent-builtin.bats` |
 | [undo](./undo/requirements.md) | R-UNDO | `undo.bats` |
 | [safety-preflights](./safety-preflights/requirements.md) | R-SAFE | `worktree-clean.bats`, `release-branch-guard.bats`, `remote-sync.bats`, `no-release.bats` |
 | [hooks](./hooks/requirements.md) | R-HOOK | `hooks.bats`, `args.bats` |

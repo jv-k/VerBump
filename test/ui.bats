@@ -109,7 +109,9 @@ ui_repo() {
 
 @test "UI: push prompt shows the magenta CONFIRM pill + default-fg question text" {
   ui_repo
-  run bash -c "echo n | env CLICOLOR_FORCE=1 '${profile_script}' -d -y -v 1.0.1"
+  # A live run with no -p and no --yes is the only path that still asks:
+  # --yes answers the prompt and --dry-run never shows it (R-YES-1, R-DRY-5).
+  run bash -c "echo n | env CLICOLOR_FORCE=1 '${profile_script}' -v 1.0.1"
   assert_failure 5
   # Magenta inverted pill on its own line, flush to the margin, then the
   # question in the terminal's own default fg (no colour wrap, no leading
@@ -123,8 +125,8 @@ ui_repo() {
 
 @test "UI: changelog step emits a green CHANGELOG subsection pill" {
   ui_repo
-  run bash -c "echo n | env CLICOLOR_FORCE=1 '${profile_script}' -d -y -v 1.0.1"
-  assert_failure 5
+  run env CLICOLOR_FORCE=1 "${profile_script}" -d -y -v 1.0.1
+  assert_success
   # subsection() renders an inverted bold-green pill, flush to the margin:
   # "\e[7;1;32m TEXT \e[0m"
   assert_output --partial $'\n\033[7;1;32m CHANGELOG \033[0m'
@@ -132,7 +134,8 @@ ui_repo() {
 
 @test "UI: NO_COLOR strips all ANSI, including the new tokens" {
   ui_repo
-  run bash -c "echo n | env NO_COLOR=1 CLICOLOR_FORCE=1 '${profile_script}' -d -y -v 1.0.1"
+  # Live run declined at the push prompt, so the CONFIRM pill is covered too.
+  run bash -c "echo n | env NO_COLOR=1 CLICOLOR_FORCE=1 '${profile_script}' -v 1.0.1"
   assert_failure 5
   refute_output --partial $'\033['
 }

@@ -231,9 +231,11 @@ SH
   # 'origin' is not configured, so the push fails. Live run (no -d).
   PATH="${shim}:$PATH" VERBUMP_RELEASE_NOTES_CMD='echo NOTES' \
     run ${profile_script} --release -p origin -b -c -v 1.2.5
+  assert_failure 1
   strip_ansi_output
-  assert_output --partial "Push failed"
-  assert_output --partial "Skipping GitHub release"
+  assert_output --partial "Push to <origin> failed"
+  # The hint names the command that publishes the release once the push works.
+  assert_output --partial "gh release create v1.2.5"
   refute_output --partial "GH-RELEASE-CALLED"
 }
 

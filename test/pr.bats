@@ -141,7 +141,7 @@ SH
   assert_equal "$before" "$after"
 }
 
-@test "pr: a failed push skips the release PR" {
+@test "pr: a failed push exits 1 before the release PR (R-FLOW-8)" {
   local repo shim
   repo="$(scratch_repo)"; cd "$repo"
   printf '{ "version": "1.0.0" }\n' > package.json
@@ -150,9 +150,11 @@ SH
 
   # 'origin' is not configured, so the push fails. Live run (no -d).
   PATH="${shim}:$PATH" run ${profile_script} --pr -p origin -c -v 1.2.5 --base main
+  assert_failure 1
   strip_ansi_output
-  assert_output --partial "Push failed"
-  assert_output --partial "Skipping release PR"
+  assert_output --partial "Push to <origin> failed"
+  # The hint names the command that opens the PR once the push works.
+  assert_output --partial "gh pr create --head release-1.2.5 --base main"
   refute_output --partial "GH-CALL: pr create"
 }
 

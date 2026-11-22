@@ -355,7 +355,7 @@ usage() {
 
   print-opt-group "Run mode & output"
   print-opt-row "-d" "--dry-run"       ""            "Dry-run: print every side-effect without executing."
-  print-opt-row "-y" "--yes"           ""            "Skip interactive confirmation prompts."
+  print-opt-row "-y" "--yes"           ""            "Answer every prompt: take the suggested version, push, and confirm --undo."
   print-opt-row "-q" "--quiet"         ""            "Suppress decoration; print only the new version on stdout (needs -y, -v, a bump level, or --preid)."
   print-opt-row ""   "--json"          ""            "With --dry-run: print the release plan as one JSON object on stdout (needs -y, -v, a bump level, or --preid)."
 

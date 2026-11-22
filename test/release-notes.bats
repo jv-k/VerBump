@@ -409,12 +409,12 @@ release_output_with_agent() {
 @test "notes agent: a failed push never invokes the agent (#162)" {
   agent_release_repo
 
-  # 'nowhere' is no remote: the push fails (non-fatal) and the release is
-  # skipped, so the run still exits 0.
+  # 'nowhere' is no remote: the push fails, which ends the run with exit 1
+  # before the release step (R-FLOW-8).
   AGENT_OUT="NOTES" run_with_agent --release -p nowhere -b -c -v 1.3.0
-  assert_success
+  assert_failure 1
   strip_ansi_output
-  assert_output --partial "Skipping GitHub release"
+  assert_output --partial "Push to <nowhere> failed"
   assert_agent_not_run
 }
 

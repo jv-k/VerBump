@@ -11,3 +11,8 @@
 # Screenshots workflow only re-renders by hand now. Needs vhs, ttyd, ffmpeg,
 # rsvg-convert, jq and gifsicle; see dev/screenshots.sh.
 PRE_BUMP_CMD="pnpm lint && pnpm tests:run && ./dev/screenshots.sh release"
+
+# Dogfood the notes agent (ADR-24): `pnpm release` lets claude (else codex)
+# write the GitHub release notes. With neither available, the release falls
+# back to gh --generate-notes, so CI and fresh clones still work.
+RELEASE_NOTES_AGENT=auto

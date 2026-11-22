@@ -35,6 +35,11 @@ true
 #                 .verbumprc's own directory; scopes commit analysis to a
 #                 package in a monorepo. Default "." — a root rc, or no rc,
 #                 resolves to the repo root = whole-repo behaviour, R-MONO-1)
+#   RELEASE_NOTES_AGENT (notes agent for --release notes: off, the default,
+#                        or a command that reads the prompt on stdin;
+#                        VERBUMP_RELEASE_NOTES_CMD wins over it, R-REL-10)
+#   RELEASE_NOTES_PROMPT (guidance appended to the notes agent's built-in
+#                         prompt; empty = none, R-REL-11)
 #   FLAG_NOBRANCH (deprecated, no-op — tag-in-place is the default as of 2.0)
 #
 # Safety: shell-sourced files are code. The rc must be owned by the current
@@ -46,7 +51,8 @@ _CONFIG_KEYS=(TAG_PREFIX REL_PREFIX PUSH_DEST COMMIT_MSG_PREFIX \
               COMMIT_MSG_TEMPLATE FLAG_BRANCH PR_BASE CHANGELOG_STYLE \
               FLAG_NOBRANCH FLAG_NOCHANGELOG FLAG_CHANGELOG_PAUSE \
               ALLOW_DIRTY NO_FETCH RELEASE_BRANCHES TAG_SIGN SOURCE_FILE \
-              BUMP_FILES PRE_BUMP_CMD POST_TAG_CMD COMMIT_PATHS)
+              BUMP_FILES PRE_BUMP_CMD POST_TAG_CMD COMMIT_PATHS \
+              RELEASE_NOTES_AGENT RELEASE_NOTES_PROMPT)
 
 # Package scope resolved from COMMIT_PATHS by resolve-commit-scope (R-MONO-1).
 # VB_SCOPE_ACTIVE is true only when the scope is narrower than the repo root;
@@ -183,7 +189,8 @@ load-config() {
 # RELEASE_BRANCHES defaults to unset/empty = guard off (R-SAFE-10);
 # COMMIT_MSG_TEMPLATE defaults to unset/empty = the legacy
 # COMMIT_MSG_PREFIX + generated-list message (R-TPL-1);
-# PRE_BUMP_CMD / POST_TAG_CMD default to unset/empty = no hook (R-HOOK-1/2).
+# PRE_BUMP_CMD / POST_TAG_CMD default to unset/empty = no hook (R-HOOK-1/2);
+# RELEASE_NOTES_PROMPT defaults to unset/empty = no extra guidance (R-REL-11).
 apply-config-defaults() {
   TAG_PREFIX="${TAG_PREFIX:-v}"
   REL_PREFIX="${REL_PREFIX:-release-}"
@@ -206,6 +213,9 @@ apply-config-defaults() {
   # rc — or no rc at all — therefore resolves to the repo root, which
   # resolve-commit-scope treats as "no scope" (today's whole-repo behaviour).
   COMMIT_PATHS="${COMMIT_PATHS:-.}"
+  # The notes agent is opt-in (ADR-24): "off" keeps --release notes exactly
+  # as they are without one (R-REL-10).
+  RELEASE_NOTES_AGENT="${RELEASE_NOTES_AGENT:-off}"
 }
 
 # Resolve COMMIT_PATHS into the package scope (R-MONO-1, spec #128). Each

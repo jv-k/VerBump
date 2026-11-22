@@ -175,3 +175,22 @@ load 'test_helper'
   codes=$(printf '%s' "${lines[0]}" | grep -o $'\e\\[38;2;' | wc -l)
   [ "$codes" -eq 21 ]
 }
+
+@test "help: --release names every notes-agent key and links the guide" {
+  # The notes agent has three keys and a guide; --help names them all so a
+  # reader who never opens the docs site can still find the timeout and prompt.
+  run get_help_msg
+  assert_success
+  strip_ansi_output
+  assert_output --partial "RELEASE_NOTES_AGENT (auto, claude, codex or a command)"
+  assert_output --partial "RELEASE_NOTES_PROMPT"
+  assert_output --partial "RELEASE_NOTES_AGENT_TIMEOUT"
+  assert_output --partial "https://verbump.jvk.to/docs/guides/release-notes"
+}
+
+@test "help: EXAMPLES shows a release with agent-written notes" {
+  run get_help_msg
+  assert_success
+  strip_ansi_output
+  assert_line "  RELEASE_NOTES_AGENT=auto verbump -p origin --release"
+}

@@ -304,10 +304,11 @@ check-pr-deps() {
 # notes a release publishes without a notes agent (ADR-24). A notes agent that
 # fails prints one warning naming the cause and falls through to those notes
 # (R-REL-13); RELEASE_NOTES_AGENT=auto that finds no agent prints one info
-# line instead and falls through the same way (R-REL-19). A custom command runs in dry-run too, so the preview reflects
-# real output (R-REL-5). If it exits non-zero, fail 1 with its stderr; the tag
-# push already happened and is intentionally NOT rolled back (R-REL-6). Call it
-# directly, never in $(...): the results are globals and `fail` must exit.
+# line instead and falls through the same way (R-REL-19). A custom command
+# runs in dry-run too, so the preview reflects real output (R-REL-5). If it
+# exits non-zero, fail 1 with its stderr; the tag push already happened and
+# is intentionally NOT rolled back (R-REL-6). Call it directly, never in
+# $(...): the results are globals and `fail` must exit.
 resolve-release-notes() {
   local notes_cmd="${VERBUMP_RELEASE_NOTES_CMD:-}"
   local agent="${RELEASE_NOTES_AGENT:-off}"

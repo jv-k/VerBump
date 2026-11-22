@@ -279,13 +279,10 @@ run-notes-agent() {
   fi
   _resolve-notes-agent-timeout
 
-  case $cmd in
-    claude|codex)
-      _resolve-notes-builtin "$cmd" || return 1
-      ;;
-  esac
   case $NOTES_AGENT_NAME in
     claude|codex)
+      # auto has resolved its pick already; a named agent resolves here.
+      [ "$cmd" = auto ] || _resolve-notes-builtin "$cmd" || return 1
       log_info "Notes agent: ${S_VAL-}${NOTES_AGENT_NAME}${RESET-} (${_NOTES_AGENT_AUTH})"
       cmd=$_NOTES_AGENT_CMD
       ;;

@@ -22,10 +22,10 @@ STUB_ORG="Stub Org Ltd"
 # Write stub `claude` and `codex` executables into <dir>. A run (not a status
 # check) appends its name to $AGENT_REC/ran, writes its arguments one per
 # line to $AGENT_REC/argv, "set" or nothing for its provider key to
-# $AGENT_REC/key, and its stdin to $AGENT_REC/stdin. It prints progress on stdout and stderr, and its final
-# message ($AGENT_OUT) the way the real CLI does: claude as the result field
-# of its --output-format json object, codex to the --output-last-message
-# file (and to stdout, like codex exec).
+# $AGENT_REC/key, and its stdin to $AGENT_REC/stdin. It prints progress on
+# stdout and stderr, and its final message ($AGENT_OUT) the way the real CLI
+# does: claude as the result field of its --output-format json object, codex
+# to the --output-last-message file (and to stdout, like codex exec).
 builtin_agent_stubs() {
   local dir=$1
   cat > "${dir}/claude" <<'SH'
@@ -108,8 +108,8 @@ builtin_agent_repo() {
 # RELEASE_NOTES_AGENT=<agent>, both provider keys unset unless a VAR=value
 # sets one, and STUB_AUTH / STUB_AUTH_CLAUDE / STUB_AUTH_CODEX / AGENT_OUT /
 # AGENT_RC from the caller's prefix (an unset per-agent auth stays unset, so
-# the stub falls back to STUB_AUTH). VB_PATH
-# replaces PATH when set (the not-installed case).
+# the stub falls back to STUB_AUTH). VB_PATH replaces PATH when set (the
+# not-installed case).
 run_builtin() {
   local agent=$1
   shift
@@ -423,7 +423,7 @@ path_without_agents() {
     assert_output 1
     # No line in the run is a warning ("!" after the gutter).
     run grep -E '^[[:space:]]*! ' <<< "$output"
-    assert_failure
+    assert_failure 1
     [ ! -f "${AGENT_REC}/ran" ] || bats_fail "an agent ran (${setup})"
     assert_gh_argv "${SHIM}/argv" release create v1.3.0 --generate-notes --notes-start-tag v1.2.3
   done

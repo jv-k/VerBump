@@ -347,6 +347,7 @@ RC
 
   run load-config
   assert_success
+  strip_ansi_output
   refute_output --partial "Unknown .verbumprc key"
 
   load-config

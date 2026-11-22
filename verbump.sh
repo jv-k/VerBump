@@ -81,7 +81,7 @@ FLAG_JSON=false # --json: with --dry-run, emit the release plan as one JSON obje
 : "${CHANGELOG_STYLE:=flat}" # CHANGELOG.md style: flat (1.x-identical, default) | grouped
 : "${SOURCE_FILE:=package.json}" # Version source + primary bump target (R-SRC-1/5)
 : "${RELEASE_NOTES_AGENT:=off}" # Notes agent for --release notes: off | <command> (ADR-24)
-: "${RELEASE_NOTES_AGENT_TIMEOUT:=120}" # Seconds before a hung notes agent is stopped (R-REL-15)
+: "${RELEASE_NOTES_AGENT_TIMEOUT:=$NOTES_AGENT_TIMEOUT_DEFAULT}" # Seconds before a hung notes agent is stopped (R-REL-15)
 
 # Internal alias for the resolved version source. Everything downstream reads
 # VER_FILE; main() re-derives it from SOURCE_FILE once config + CLI are final.

@@ -74,10 +74,14 @@ build-notes-prompt() {
     "$(git diff --shortstat "$diff_from" "$end" ${scope_args[@]+"${scope_args[@]}"} 2>/dev/null)"
 }
 
-# The timeout a RELEASE_NOTES_AGENT_TIMEOUT that is not a positive integer
-# falls back to (R-REL-15).
-_NOTES_AGENT_TIMEOUT_DEFAULT=120
+# The default RELEASE_NOTES_AGENT_TIMEOUT, in seconds, and the value a
+# timeout that is not a positive integer falls back to (R-REL-15). The one
+# copy of the number: apply-config-defaults and the verbump.sh `:=` line
+# read it too.
+NOTES_AGENT_TIMEOUT_DEFAULT=120
 
+# The timeout the current run uses, set by _resolve-notes-agent-timeout.
+_NOTES_AGENT_TIMEOUT_S=""
 # Watchdog state, global so the interrupt trap can reach it: the PIDs of the
 # agent and the timer (each leads its own process group) and the run's
 # temporary directories. Empty when no agent runs.
@@ -88,17 +92,17 @@ _NOTES_AGENT_TMP=()
 # Set _NOTES_AGENT_TIMEOUT_S to RELEASE_NOTES_AGENT_TIMEOUT when it is a
 # positive integer; otherwise warn and use the default. Leading zeros are
 # stripped as text, not by arithmetic, so "08" is 8, not an octal error.
-_notes-agent-timeout() {
-  local value="${RELEASE_NOTES_AGENT_TIMEOUT-}" digits
+_resolve-notes-agent-timeout() {
+  local value="${RELEASE_NOTES_AGENT_TIMEOUT-}" seconds
   case "$value" in
-    ''|*[!0-9]*) digits="" ;;
-    *) digits="${value#"${value%%[!0]*}"}" ;;
+    ''|*[!0-9]*) seconds="" ;;
+    *) seconds="${value#"${value%%[!0]*}"}" ;;
   esac
-  if [ -z "$digits" ]; then
-    log_warn "RELEASE_NOTES_AGENT_TIMEOUT '${S_VAL-}${value}${RESET-}' is not a positive integer — using ${_NOTES_AGENT_TIMEOUT_DEFAULT} seconds."
-    digits=$_NOTES_AGENT_TIMEOUT_DEFAULT
+  if [ -z "$seconds" ]; then
+    log_warn "RELEASE_NOTES_AGENT_TIMEOUT '${S_VAL-}${value}${RESET-}' is not a positive integer — using ${NOTES_AGENT_TIMEOUT_DEFAULT} seconds."
+    seconds=$NOTES_AGENT_TIMEOUT_DEFAULT
   fi
-  _NOTES_AGENT_TIMEOUT_S=$digits
+  _NOTES_AGENT_TIMEOUT_S=$seconds
 }
 
 # Stop whatever the watchdog still has running and remove its temporary
@@ -153,7 +157,7 @@ _notes-agent-interrupt() {
 run-notes-agent() {
   local cmd=$1 scratch workdir rc had_monitor=false saved_traps
   NOTES_AGENT_OUTPUT="" NOTES_AGENT_ERROR=""
-  _notes-agent-timeout
+  _resolve-notes-agent-timeout
 
   # Prompt and output live outside the agent's directory, so it starts empty.
   scratch=$(mktemp -d) || { NOTES_AGENT_ERROR="could not start (mktemp failed)"; return 1; }

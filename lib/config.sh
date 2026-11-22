@@ -223,7 +223,7 @@ apply-config-defaults() {
   # Seconds before a hung notes agent is stopped (R-REL-15). An invalid value
   # is kept here and rejected with a warning only when the agent runs, so a
   # bad value never warns on a run that has no notes agent.
-  RELEASE_NOTES_AGENT_TIMEOUT="${RELEASE_NOTES_AGENT_TIMEOUT:-120}"
+  RELEASE_NOTES_AGENT_TIMEOUT="${RELEASE_NOTES_AGENT_TIMEOUT:-$NOTES_AGENT_TIMEOUT_DEFAULT}"
 }
 
 # Resolve COMMIT_PATHS into the package scope (R-MONO-1, spec #128). Each
